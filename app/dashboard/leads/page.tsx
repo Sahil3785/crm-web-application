@@ -109,7 +109,10 @@ export default function LeadsPage() {
       }
     }
 
-    if (filters.date) query = query.ilike("date_and_time", `${filters.date}%`);
+    // Date filter — Leads.date_and_time is a DATE column, so use exact match (YYYY-MM-DD)
+    if (filters.date) {
+      query = query.eq("date_and_time", filters.date);
+    }
     if (filters.search) {
       query = query.or(
         `name.ilike.%${filters.search}%,mobile.ilike.%${filters.search}%,email.ilike.%${filters.search}%,city.ilike.%${filters.search}%`

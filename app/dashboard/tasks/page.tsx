@@ -16,10 +16,12 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Calendar, User, Clock, CheckCircle, AlertCircle, XCircle, Grid3X3, Table, CalendarDays, LayoutGrid, Share, X, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, Settings, ChevronDown, DollarSign, Users, TrendingUp, Upload, File, Paperclip } from "lucide-react";
+import { Plus, Calendar, User, Clock, CheckCircle, AlertCircle, XCircle, Grid3X3, Table, CalendarDays, LayoutGrid, Share, X, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, Settings, ChevronDown, DollarSign, Users, TrendingUp, Upload, File, Paperclip, Eye } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { DatePicker } from "@/components/ui/date-picker";
 import { supabase } from "@/lib/supabaseClient";
 
 interface Task {
@@ -67,7 +69,7 @@ export default function TaskManagerPage() {
     description: "",
     priority: "medium",
     due_date: "",
-    assignee: "",
+    assignees: [] as string[],
   });
   const [createAttachments, setCreateAttachments] = useState<File[]>([]);
   
@@ -93,6 +95,10 @@ export default function TaskManagerPage() {
     dueDate: true,
     actions: true,
   });
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     loadData();
@@ -140,24 +146,24 @@ export default function TaskManagerPage() {
       return;
     }
 
-    if (!newTask.assignee) {
-      toast.error("Please select an assignee");
+    if (!newTask.assignees || newTask.assignees.length === 0) {
+      toast.error("Please select at least one assignee");
       return;
     }
 
     try {
+      const rows = newTask.assignees.map((assigneeId) => ({
+        title: newTask.title,
+        description: newTask.description,
+        priority: newTask.priority,
+        due_date: newTask.due_date || null,
+        assignee: assigneeId,
+        status: "pending",
+      }));
+
       const { data, error } = await supabase
         .from("tasks")
-        .insert([
-          {
-            title: newTask.title,
-            description: newTask.description,
-            priority: newTask.priority,
-            due_date: newTask.due_date || null,
-            assignee: newTask.assignee,
-            status: "pending",
-          },
-        ])
+        .insert(rows)
         .select();
 
       if (error) {
@@ -167,46 +173,41 @@ export default function TaskManagerPage() {
       }
 
       if (data && data.length > 0) {
+        let attachmentsMap: Record<string, any[]> = {};
         // Upload files if any
         if (createAttachments.length > 0) {
           try {
-            console.log("Uploading files for task:", data[0].id, "Files:", createAttachments.length);
-            const uploadedFiles = await uploadFilesToSupabase(createAttachments, data[0].id);
-            console.log("Uploaded files result:", uploadedFiles);
-            
-            // Update task with attachments
-            const { error: updateError } = await supabase
-              .from("tasks")
-              .update({ attachments: uploadedFiles })
-              .eq("id", data[0].id);
-            
-            if (updateError) {
-              console.error("Error updating task with attachments:", {
-                message: updateError.message,
-                code: updateError.code,
-                hint: updateError.hint,
-                details: updateError.details
-              });
-              toast.error(`Failed to update task with attachments: ${updateError.message}`);
-            } else {
-              console.log("Successfully updated task with attachments");
-            }
+            await Promise.all(
+              data.map(async (t) => {
+                const uploadedFiles = await uploadFilesToSupabase(createAttachments, t.id);
+                const { error: updateError } = await supabase
+                  .from("tasks")
+                  .update({ attachments: uploadedFiles })
+                  .eq("id", t.id);
+                if (updateError && (updateError as any).message) {
+                  console.error("Error updating task with attachments:", (updateError as any).message);
+                }
+                attachmentsMap[t.id] = uploadedFiles;
+              })
+            );
           } catch (uploadError: any) {
-            console.error("Error in file upload process:", {
-              message: uploadError.message,
-              stack: uploadError.stack
-            });
+            console.error("Error in file upload process:", uploadError);
             toast.error(`Failed to upload attachments: ${uploadError.message}`);
           }
         }
 
-        setTasks([data[0], ...tasks]);
+        // Merge attachments into local rows
+        const updatedRows = data.map((t) => ({
+          ...t,
+          attachments: attachmentsMap[t.id] ? attachmentsMap[t.id] : t.attachments,
+        }));
+        setTasks([...updatedRows, ...tasks]);
         setNewTask({
           title: "",
           description: "",
           priority: "medium",
           due_date: "",
-          assignee: "",
+          assignees: [],
         });
         setCreateAttachments([]);
         setIsCreateDialogOpen(false);
@@ -305,23 +306,27 @@ export default function TaskManagerPage() {
 
       if (error) throw error;
 
-      // Upload files if any
+      // Compose attachments: copy original + any new share files
+      let newAttachments: any[] = [];
+      if (sharingTask.attachments && sharingTask.attachments.length > 0) {
+        newAttachments = [...sharingTask.attachments];
+      }
       if (shareAttachments.length > 0) {
         const uploadedFiles = await uploadFilesToSupabase(shareAttachments, data.id);
-        
-        // Update task with attachments
+        newAttachments = [...newAttachments, ...uploadedFiles];
+      }
+      if (newAttachments.length > 0) {
         const { error: updateError } = await supabase
           .from("tasks")
-          .update({ attachments: uploadedFiles })
+          .update({ attachments: newAttachments })
           .eq("id", data.id);
-        
-        if (updateError) {
-          console.error("Error updating shared task with attachments:", updateError);
+        if (updateError && (updateError as any).message) {
+          console.error("Error updating shared task with attachments:", (updateError as any).message);
         }
       }
 
-      // Add to local state
-      setTasks(prevTasks => [data, ...prevTasks]);
+      // Add to local state (include attachments)
+      setTasks(prevTasks => [{ ...data, attachments: newAttachments.length ? newAttachments : data.attachments }, ...prevTasks]);
 
       setIsShareDialogOpen(false);
       setSharingTask(null);
@@ -375,27 +380,6 @@ export default function TaskManagerPage() {
     const uploadedFiles = [];
     
     console.log(`Starting upload of ${files.length} files for task ${taskId}`);
-    
-    // Check if storage bucket exists
-    try {
-      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-      if (bucketError) {
-        console.error('Error listing buckets:', bucketError);
-        throw new Error(`Storage bucket error: ${bucketError.message}`);
-      }
-      
-      const documentsBucket = buckets?.find(bucket => bucket.name === 'documents');
-      if (!documentsBucket) {
-        console.error('Documents bucket not found. Available buckets:', buckets?.map(b => b.name));
-        throw new Error('Documents storage bucket not found. Please check your Supabase storage configuration.');
-      }
-      
-      console.log('Documents bucket found:', documentsBucket);
-    } catch (bucketCheckError: any) {
-      console.error('Bucket check failed:', bucketCheckError);
-      toast.error(`Storage configuration error: ${bucketCheckError.message}`);
-      return uploadedFiles;
-    }
     
     for (const file of files) {
       try {
@@ -463,6 +447,37 @@ export default function TaskManagerPage() {
     } catch (error: any) {
       console.error('Error downloading file:', error);
       toast.error(`Failed to download ${file.name}: ${error.message}`);
+    }
+  };
+
+  const deleteAttachment = async (
+    taskId: string,
+    file: { name: string; path: string; size: number; type: string }
+  ) => {
+    try {
+      // Remove from storage
+      const { error: removeError } = await supabase.storage
+        .from('documents')
+        .remove([file.path]);
+      if (removeError) throw removeError;
+
+      // Update DB row
+      const task = tasks.find(t => t.id === taskId) || selectedTask;
+      const remaining = (task?.attachments || []).filter((f: any) => f.path !== file.path);
+      const { error: updateError } = await supabase
+        .from('tasks')
+        .update({ attachments: remaining })
+        .eq('id', taskId);
+      if (updateError) throw updateError;
+
+      // Update state (list + modal)
+      setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, attachments: remaining } : t)));
+      setSelectedTask(prev => (prev && prev.id === taskId ? { ...prev, attachments: remaining } as any : prev));
+
+      toast.success(`Removed ${file.name}`);
+    } catch (e: any) {
+      console.error('Error removing attachment:', e);
+      toast.error(`Failed to remove ${file.name}: ${e.message || 'Unknown error'}`);
     }
   };
 
@@ -644,10 +659,10 @@ export default function TaskManagerPage() {
         <div className="flex flex-col h-screen font-sans">
           <SiteHeader />
           <div className="flex-1 p-6">
-            <div className="space-y-6">
+            <div className="space-y-4">
 
               {/* Task Statistics Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {/* Pending Tasks Card */}
                 <Card className="bg-gradient-to-t from-primary/5 to-card dark:bg-card shadow-xs">
                   <CardHeader>
@@ -655,7 +670,7 @@ export default function TaskManagerPage() {
                       <span>Pending Tasks</span>
                       <Clock className="h-4 w-4 text-muted-foreground" />
                     </CardDescription>
-                    <CardTitle className="text-2xl font-semibold tabular-nums">
+                    <CardTitle className="text-xl font-semibold tabular-nums">
                       {taskStats.pending}
                     </CardTitle>
                   </CardHeader>
@@ -668,7 +683,7 @@ export default function TaskManagerPage() {
                       <span>In Progress</span>
                       <AlertCircle className="h-4 w-4 text-muted-foreground" />
                     </CardDescription>
-                    <CardTitle className="text-2xl font-semibold tabular-nums">
+                    <CardTitle className="text-xl font-semibold tabular-nums">
                       {taskStats.inProgress}
                     </CardTitle>
                   </CardHeader>
@@ -681,7 +696,7 @@ export default function TaskManagerPage() {
                       <span>Completed</span>
                       <CheckCircle className="h-4 w-4 text-muted-foreground" />
                     </CardDescription>
-                    <CardTitle className="text-2xl font-semibold tabular-nums">
+                    <CardTitle className="text-xl font-semibold tabular-nums">
                       {taskStats.completed}
                     </CardTitle>
                   </CardHeader>
@@ -943,83 +958,55 @@ export default function TaskManagerPage() {
                         </div>
                         <div className="grid gap-2">
                           <Label htmlFor="due_date">Due Date</Label>
-                          <Input
-                            id="due_date"
-                            type="date"
-                            value={newTask.due_date}
-                            onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
+                          <DatePicker
+                            date={newTask.due_date ? new Date(newTask.due_date + 'T00:00:00') : undefined}
+                            onDateChange={(d) => {
+                              if (!d) { setNewTask({ ...newTask, due_date: "" }); return; }
+                              const y = d.getFullYear();
+                              const m = String(d.getMonth() + 1).padStart(2, '0');
+                              const day = String(d.getDate()).padStart(2, '0');
+                              setNewTask({ ...newTask, due_date: `${y}-${m}-${day}` });
+                            }}
+                            placeholder="Pick a date"
                           />
                         </div>
                         <div className="grid gap-2">
                           <Label htmlFor="assignee">Assign To *</Label>
-                          <Select
-                            value={newTask.assignee}
-                            onValueChange={(value) => setNewTask({ ...newTask, assignee: value })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select an employee" />
-                            </SelectTrigger>
-                            <SelectContent>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" className="justify-between">
+                                {newTask.assignees.length === 0
+                                  ? "Select employee(s)"
+                                  : `${newTask.assignees.length} selected`}
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-64 max-h-80 overflow-auto">
                               {employees.map((employee) => (
-                                <SelectItem key={employee.whalesync_postgres_id} value={employee.whalesync_postgres_id}>
-                                  {employee.full_name}
-                                </SelectItem>
+                                <div key={employee.whalesync_postgres_id} className="px-2 py-1 hover:bg-muted/50 cursor-pointer">
+                                  <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`emp-${employee.whalesync_postgres_id}`}
+                                      checked={newTask.assignees.includes(employee.whalesync_postgres_id)}
+                                      onCheckedChange={(checked) => {
+                                        setNewTask((prev) => ({
+                                          ...prev,
+                                          assignees: checked
+                                            ? [...prev.assignees, employee.whalesync_postgres_id]
+                                            : prev.assignees.filter((id) => id !== employee.whalesync_postgres_id),
+                                        }));
+                                      }}
+                                    />
+                                    <Label htmlFor={`emp-${employee.whalesync_postgres_id}`} className="text-sm cursor-pointer">
+                                      {employee.full_name}
+                                    </Label>
+                                  </div>
+                                </div>
                               ))}
-                            </SelectContent>
-                          </Select>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                         
-                        {/* File Attachments */}
-                        <div className="grid gap-2">
-                          <Label>Attachments (Optional)</Label>
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="file"
-                                multiple
-                                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.xlsx,.xls,.ppt,.pptx"
-                                onChange={(e) => handleFileUpload(e.target.files, setCreateAttachments)}
-                                className="flex-1"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => document.getElementById('create-file-input')?.click()}
-                                className="gap-2"
-                              >
-                                <Upload className="h-4 w-4" />
-                                Upload
-                              </Button>
-                            </div>
-                            
-                            {createAttachments.length > 0 && (
-                              <div className="space-y-2">
-                                <p className="text-sm font-medium">Selected Files:</p>
-                                {createAttachments.map((file, index) => (
-                                  <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
-                                    <div className="flex items-center gap-2">
-                                      <File className="h-4 w-4 text-muted-foreground" />
-                                      <span className="text-sm">{file.name}</span>
-                                      <span className="text-xs text-muted-foreground">
-                                        ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                                      </span>
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => removeFile(index, setCreateAttachments)}
-                                      className="h-6 w-6 p-0"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
                       </div>
                       <DialogFooter>
                         <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
@@ -1115,32 +1102,27 @@ export default function TaskManagerPage() {
                                                 
                                                 {/* Attachments */}
                                                 {task.attachments && task.attachments.length > 0 && (
-                                                  <div className="space-y-1">
-                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                      <Paperclip className="h-3 w-3" />
-                                                      <span>Attachments ({task.attachments.length})</span>
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                      {task.attachments.slice(0, 2).map((file, index) => (
-                                                        <div
-                                                          key={index}
-                                                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            downloadFile(file);
-                                                          }}
-                                                          title={`Download ${file.name}`}
+                                                  <div className="flex items-center gap-2 flex-wrap">
+                                                    <Paperclip className="h-3 w-3 text-muted-foreground" />
+                                                    {task.attachments.slice(0,3).map((file,idx)=> (
+                                                      <div key={idx} className="flex items-center gap-1">
+                                                        <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={(e)=>{ e.stopPropagation(); downloadFile(file); }}>
+                                                          {file.name}
+                                                        </Button>
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="sm"
+                                                          className="h-6 px-1 text-destructive hover:text-destructive"
+                                                          onClick={(e)=>{ e.stopPropagation(); if (confirm(`Remove ${file.name}?`)) deleteAttachment(task.id, file); }}
+                                                          title="Remove attachment"
                                                         >
-                                                          <File className="h-3 w-3" />
-                                                          <span className="truncate">{file.name}</span>
-                                                        </div>
-                                                      ))}
-                                                      {task.attachments.length > 2 && (
-                                                        <div className="text-xs text-muted-foreground">
-                                                          +{task.attachments.length - 2} more files
-                                                        </div>
-                                                      )}
-                                                    </div>
+                                                          <X className="h-3 w-3" />
+                                                        </Button>
+                                                      </div>
+                                                    ))}
+                                                    {task.attachments.length > 3 && (
+                                                      <span className="text-xs text-muted-foreground">+{task.attachments.length - 3} more</span>
+                                                    )}
                                                   </div>
                                                 )}
                                                 
@@ -1189,7 +1171,8 @@ export default function TaskManagerPage() {
 
                   {/* Table View */}
                   {viewType === "table" && (
-                    <div className="w-full rounded-md border">
+                    <>
+                    <div className="h-[calc(100vh-340px)] rounded-md border overflow-auto">
                       <UITable className="w-full">
                         <TableHeader>
                           <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -1283,6 +1266,7 @@ export default function TaskManagerPage() {
                                 return aValue < bValue ? 1 : -1;
                               }
                             })
+                            .slice((page - 1) * pageSize, page * pageSize)
                             .map((task) => (
                               <TableRow key={task.id} className="hover:bg-muted/50">
                                 {visibleColumns.task && (
@@ -1354,27 +1338,61 @@ export default function TaskManagerPage() {
                                     )}
                                   </TableCell>
                                 )}
+                                
                                 {visibleColumns.actions && (
                                   <TableCell className="px-3 py-3">
                                     <div className="flex gap-1">
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleShareTask(task)}
-                                        className="h-8 w-8 p-0"
-                                        title="Share task"
-                                      >
-                                        <Share className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleDeleteTask(task.id)}
-                                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                        title="Delete task"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => { setSelectedTask(task); setIsTaskModalOpen(true); }}
+                                              className="h-8 w-8 p-0"
+                                            >
+                                              <Eye className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" align="center" className="bg-black text-white">
+                                            <p>View</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => handleShareTask(task)}
+                                              className="h-8 w-8 p-0"
+                                            >
+                                              <Share className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" align="center" className="bg-black text-white">
+                                            <p>Share</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => handleDeleteTask(task.id)}
+                                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                            >
+                                              <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" align="center" className="bg-black text-white">
+                                            <p>Delete</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
                                     </div>
                                   </TableCell>
                                 )}
@@ -1383,6 +1401,31 @@ export default function TaskManagerPage() {
                         </TableBody>
                       </UITable>
                     </div>
+                    {/* Pagination */}
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, filteredTasks.length)} of {filteredTasks.length} tasks
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="rows" className="text-sm">Rows</Label>
+                        <Select value={String(pageSize)} onValueChange={(v)=>{ setPageSize(Number(v)); setPage(1); }}>
+                          <SelectTrigger id="rows" className="h-8 w-[90px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[10,20,50,100].map(n => (
+                              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button variant="outline" size="sm" disabled={page===1} onClick={()=>setPage(1)}>First</Button>
+                        <Button variant="outline" size="sm" disabled={page===1} onClick={()=>setPage(p=>Math.max(1,p-1))}>Prev</Button>
+                        <div className="text-sm">Page {page} of {Math.max(1, Math.ceil(filteredTasks.length / pageSize))}</div>
+                        <Button variant="outline" size="sm" disabled={page>=Math.ceil(filteredTasks.length / pageSize)} onClick={()=>setPage(p=>p+1)}>Next</Button>
+                        <Button variant="outline" size="sm" disabled={page>=Math.ceil(filteredTasks.length / pageSize)} onClick={()=>setPage(Math.ceil(filteredTasks.length / pageSize))}>Last</Button>
+                      </div>
+                    </div>
+                    </>
                   )}
 
                   {/* Calendar View */}
@@ -1572,68 +1615,7 @@ export default function TaskManagerPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="share-message">Message (Optional)</Label>
-              <Textarea
-                id="share-message"
-                value={shareForm.message}
-                onChange={(e) => setShareForm({ ...shareForm, message: e.target.value })}
-                placeholder="Add a message about why you're sharing this task..."
-                rows={3}
-              />
-            </div>
             
-            {/* File Attachments */}
-            <div className="grid gap-2">
-              <Label>Additional Attachments (Optional)</Label>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="file"
-                    multiple
-                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.xlsx,.xls,.ppt,.pptx"
-                    onChange={(e) => handleFileUpload(e.target.files, setShareAttachments)}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => document.getElementById('share-file-input')?.click()}
-                    className="gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Upload
-                  </Button>
-                </div>
-                
-                {shareAttachments.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Selected Files:</p>
-                    {shareAttachments.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
-                        <div className="flex items-center gap-2">
-                          <File className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{file.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                          </span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(index, setShareAttachments)}
-                          className="h-6 w-6 p-0"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
             {sharingTask && (
               <div className="p-3 bg-muted/50 rounded-lg">
                 <h4 className="font-medium text-sm mb-2">Task Details:</h4>
@@ -1671,7 +1653,7 @@ export default function TaskManagerPage() {
 
       {/* Task Details Modal */}
       <Dialog open={isTaskModalOpen} onOpenChange={setIsTaskModalOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[900px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Task Details</DialogTitle>
             <DialogDescription>
@@ -1738,6 +1720,37 @@ export default function TaskManagerPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Attachments */}
+              {selectedTask.attachments && selectedTask.attachments.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-medium">Attachments</h4>
+                  <div className="space-y-1">
+                    {selectedTask.attachments.map((file, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <File className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm truncate max-w-[320px]">{file.name}</span>
+                          <span className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={() => downloadFile(file)} className="h-7 px-2">
+                            Download
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteAttachment(selectedTask.id, file)}
+                            className="h-7 px-2 text-destructive hover:text-destructive"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Task Actions */}
               <div className="flex items-center gap-2 pt-4 border-t">

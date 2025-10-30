@@ -305,13 +305,7 @@ export default function Page() {
                   >
                     {isRefreshing ? "Refreshing..." : "Refresh Data"}
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => window.location.href = '/dashboard/admin'}
-                    size="sm"
-                  >
-                    Admin Dashboard
-                  </Button>
+                  {/* Admin Dashboard button removed */}
                 </div>
                 <p className="text-sm text-muted-foreground">{lastUpdated}</p>
               </div>

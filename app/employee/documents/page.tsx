@@ -28,6 +28,11 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import DocumentsActionBar from "./components/DocumentsActionBar";
+import DocumentsGrid from "./components/DocumentsGrid";
+import DocumentsTable from "./components/DocumentsTable";
+import DocumentsPagination from "./components/DocumentsPagination";
+import DocumentDetailsModal from "./components/DocumentDetailsModal";
 
 interface Document {
   id: string;
@@ -67,6 +72,8 @@ export default function EmployeeDocumentsPage() {
   });
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
 
   const categories = ["General", "HR", "Finance", "Marketing", "Sales", "Technical", "Legal", "Other"];
 
@@ -237,7 +244,8 @@ export default function EmployeeDocumentsPage() {
       toast.error("You don't have permission to view this document");
       return;
     }
-    window.open(doc.file_url, '_blank');
+    setSelectedDoc(doc);
+    setIsDetailsOpen(true);
   };
 
   const toggleColumn = (column: keyof typeof visibleColumns) => {
@@ -289,179 +297,20 @@ export default function EmployeeDocumentsPage() {
     <div className="flex flex-col h-full">
       {/* Main Content */}
       <div className="flex flex-col overflow-hidden flex-1">
-        {/* Action Bar - Fixed */}
-        <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-3 flex-shrink-0">
-          {/* Search + Filters */}
-          <div className="flex items-center gap-3 flex-1">
-            <Input
-              placeholder="Search documents..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 min-w-[300px] h-10"
-            />
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="h-10 w-40 justify-start text-left font-normal bg-background border-border hover:bg-muted/50">
-                  <Filter className="mr-2 h-4 w-4" />
-                  {categoryFilter.length === 0 ? "All Categories" : `${categoryFilter.length} selected`}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-56 p-0 bg-background border-border shadow-lg" align="start">
-                <div className="px-3 py-2 border-b border-border">
-                  <div className="flex items-center gap-2">
-                    <Settings className="h-4 w-4 text-foreground" />
-                    <span className="text-sm font-semibold text-foreground">Categories</span>
-                  </div>
-                </div>
-                <div className="px-3 py-2 space-y-1">
-                  <div className="flex items-center space-x-3 px-2 py-1 hover:bg-muted/50 rounded-md cursor-pointer"
-                       onClick={() => setCategoryFilter([])}>
-                    <Checkbox
-                      checked={categoryFilter.length === 0}
-                      onCheckedChange={() => setCategoryFilter([])}
-                      className="border-border data-[state=checked]:bg-foreground data-[state=checked]:text-background"
-                    />
-                    <span className="text-sm font-medium text-foreground">All Categories</span>
-                  </div>
-                  {categories.map((category) => (
-                    <div key={category} className="flex items-center space-x-3 px-2 py-1 hover:bg-muted/50 rounded-md cursor-pointer"
-                         onClick={() => {
-                           if (categoryFilter.includes(category)) {
-                             setCategoryFilter(categoryFilter.filter(c => c !== category));
-                           } else {
-                             setCategoryFilter([...categoryFilter, category]);
-                           }
-                         }}>
-                      <Checkbox
-                        checked={categoryFilter.includes(category)}
-                        onCheckedChange={() => {
-                          if (categoryFilter.includes(category)) {
-                            setCategoryFilter(categoryFilter.filter(c => c !== category));
-                          } else {
-                            setCategoryFilter([...categoryFilter, category]);
-                          }
-                        }}
-                        className="border-border data-[state=checked]:bg-foreground data-[state=checked]:text-background"
-                      />
-                      <span className="text-sm font-medium text-foreground">{category}</span>
-                    </div>
-                  ))}
-                  <div className="pt-1 border-t border-border">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCategoryFilter([])}
-                      className="w-full h-7 bg-muted/50 border-border text-foreground hover:bg-muted"
-                    >
-                      Reset All
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* View Toggle */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant={!showKanban ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowKanban(false)}
-              className="h-8"
-            >
-              <List className="h-4 w-4 mr-2" />
-              Table View
-            </Button>
-            <Button
-              variant={showKanban ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowKanban(true)}
-              className="h-8"
-            >
-              <Grid3X3 className="h-4 w-4 mr-2" />
-              Kanban View
-            </Button>
-
-            {/* Custom Columns Popover */}
-            <Popover open={showColumnPopover} onOpenChange={setShowColumnPopover}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8"
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Columns
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-56 p-3">
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="document"
-                      checked={visibleColumns.document}
-                      onCheckedChange={() => toggleColumn('document')}
-                    />
-                    <label htmlFor="document" className="text-sm font-medium">
-                      Document
-                    </label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="category"
-                      checked={visibleColumns.category}
-                      onCheckedChange={() => toggleColumn('category')}
-                    />
-                    <label htmlFor="category" className="text-sm font-medium">
-                      Category
-                    </label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="fileInfo"
-                      checked={visibleColumns.fileInfo}
-                      onCheckedChange={() => toggleColumn('fileInfo')}
-                    />
-                    <label htmlFor="fileInfo" className="text-sm font-medium">
-                      File Info
-                    </label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="created"
-                      checked={visibleColumns.created}
-                      onCheckedChange={() => toggleColumn('created')}
-                    />
-                    <label htmlFor="created" className="text-sm font-medium">
-                      Created
-                    </label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="actions"
-                      checked={visibleColumns.actions}
-                      onCheckedChange={() => toggleColumn('actions')}
-                    />
-                    <label htmlFor="actions" className="text-sm font-medium">
-                      Actions
-                    </label>
-                  </div>
-                  <div className="pt-2 border-t">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={resetColumns}
-                      className="w-full h-8"
-                    >
-                      Reset All
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
-        </div>
+        <DocumentsActionBar
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          categoryFilter={categoryFilter}
+          setCategoryFilter={setCategoryFilter}
+          categories={categories}
+          showKanban={showKanban}
+          setShowKanban={setShowKanban}
+          showColumnPopover={showColumnPopover}
+          setShowColumnPopover={setShowColumnPopover}
+          visibleColumns={visibleColumns}
+          toggleColumn={toggleColumn}
+          resetColumns={resetColumns}
+        />
 
         {/* Documents Grid/Table - Scrollable */}
         <div className="flex-1 overflow-hidden px-4">
@@ -472,185 +321,24 @@ export default function EmployeeDocumentsPage() {
               </div>
             ) : paginatedDocuments.length > 0 ? (
               showKanban ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {paginatedDocuments.map(doc => (
-                    <Card key={doc.id} className="hover:shadow-md transition-shadow">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
-                            {getFileIcon(doc.file_type)}
-                            <div className="flex-1 min-w-0">
-                              <CardTitle className="text-sm font-semibold truncate">
-                                {doc.title}
-                              </CardTitle>
-                              <CardDescription className="text-xs text-muted-foreground">
-                                {doc.file_name}
-                              </CardDescription>
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="text-xs">
-                            {doc.category}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        {doc.description && (
-                          <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
-                            {doc.description}
-                          </p>
-                        )}
-                        <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-                          <span>{formatFileSize(doc.file_size)}</span>
-                          <span>{new Date(doc.created_at).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleView(doc)}
-                            className="flex-1 h-8 text-xs"
-                          >
-                            <Eye className="h-3 w-3 mr-1" />
-                            View
-                          </Button>
-                          {doc.assignments?.can_download && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDownload(doc)}
-                              className="flex-1 h-8 text-xs"
-                            >
-                              <Download className="h-3 w-3 mr-1" />
-                              Download
-                            </Button>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                <DocumentsGrid
+                  docs={paginatedDocuments}
+                  getFileIcon={getFileIcon}
+                  formatFileSize={formatFileSize}
+                  onView={handleView}
+                  onDownload={handleDownload}
+                />
               ) : (
-                <div className="w-full rounded-md border overflow-hidden flex-1 min-h-0 flex flex-col">
-                  <div className="flex-1 overflow-auto">
-                    <Table className="w-full">
-                      <TableHeader className="sticky top-0 bg-background z-10">
-                        <TableRow className="hover:bg-transparent">
-                          {visibleColumns.document && (
-                            <TableHead 
-                              className="h-10 px-3 text-sm font-semibold bg-background cursor-pointer select-none hover:bg-muted/50"
-                              onClick={() => handleSort("title")}
-                            >
-                              Document{getSortIcon("title")}
-                            </TableHead>
-                          )}
-                          {visibleColumns.category && (
-                            <TableHead 
-                              className="h-10 px-3 text-sm font-semibold bg-background cursor-pointer select-none hover:bg-muted/50"
-                              onClick={() => handleSort("category")}
-                            >
-                              Category{getSortIcon("category")}
-                            </TableHead>
-                          )}
-                          {visibleColumns.fileInfo && (
-                            <TableHead 
-                              className="h-10 px-3 text-sm font-semibold bg-background cursor-pointer select-none hover:bg-muted/50"
-                              onClick={() => handleSort("file_name")}
-                            >
-                              File Info{getSortIcon("file_name")}
-                            </TableHead>
-                          )}
-                          {visibleColumns.created && (
-                            <TableHead 
-                              className="h-10 px-3 text-sm font-semibold bg-background cursor-pointer select-none hover:bg-muted/50"
-                              onClick={() => handleSort("created_at")}
-                            >
-                              Created{getSortIcon("created_at")}
-                            </TableHead>
-                          )}
-                          {visibleColumns.actions && (
-                            <TableHead className="h-10 px-3 text-sm font-semibold bg-background">
-                              Actions
-                            </TableHead>
-                          )}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paginatedDocuments.length === 0 ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={5}
-                              className="text-center py-8 text-xs text-muted-foreground"
-                            >
-                              No documents found.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          paginatedDocuments.map(doc => (
-                            <TableRow key={doc.id} className="cursor-pointer hover:bg-muted/50">
-                              {visibleColumns.document && (
-                                <TableCell className="px-3 py-3">
-                                  <div className="flex items-center gap-3">
-                                    {getFileIcon(doc.file_type)}
-                                    <div>
-                                      <p className="font-bold text-sm">{doc.title}</p>
-                                      <p className="text-xs text-muted-foreground">{doc.description || "No description"}</p>
-                                    </div>
-                                  </div>
-                                </TableCell>
-                              )}
-                              {visibleColumns.category && (
-                                <TableCell className="px-3 py-3">
-                                  <Badge variant="outline" className="text-xs">
-                                    {doc.category}
-                                  </Badge>
-                                </TableCell>
-                              )}
-                              {visibleColumns.fileInfo && (
-                                <TableCell className="px-3 py-3">
-                                  <div className="text-sm">
-                                    <p className="font-medium">{doc.file_name}</p>
-                                    <p className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)}</p>
-                                  </div>
-                                </TableCell>
-                              )}
-                              {visibleColumns.created && (
-                                <TableCell className="px-3 py-3 text-sm">
-                                  {new Date(doc.created_at).toLocaleDateString()}
-                                </TableCell>
-                              )}
-                              {visibleColumns.actions && (
-                                <TableCell className="px-3 py-3">
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleView(doc)}
-                                      className="h-8 text-xs"
-                                    >
-                                      <Eye className="h-3 w-3 mr-1" />
-                                      View
-                                    </Button>
-                                    {doc.assignments?.can_download && (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleDownload(doc)}
-                                        className="h-8 text-xs"
-                                      >
-                                        <Download className="h-3 w-3 mr-1" />
-                                        Download
-                                      </Button>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              )}
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
+                <DocumentsTable
+                  docs={paginatedDocuments}
+                  visibleColumns={visibleColumns}
+                  handleSort={handleSort}
+                  getSortIcon={getSortIcon}
+                  getFileIcon={getFileIcon}
+                  formatFileSize={formatFileSize}
+                  onView={handleView}
+                  onDownload={handleDownload}
+                />
               )
             ) : (
               <div className="flex items-center justify-center h-64">
@@ -668,85 +356,24 @@ export default function EmployeeDocumentsPage() {
 
         {/* Pagination - Fixed at Bottom */}
         {paginatedDocuments.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-3 border-t border-border bg-muted/20 px-4 flex-shrink-0">
-            <div className="text-sm text-muted-foreground">
-              {totalCount > 0 ? (
-                <>
-                  Showing <span className="font-medium text-foreground">{pageIndex * pageSize + 1}</span> to{" "}
-                  <span className="font-medium text-foreground">{Math.min((pageIndex + 1) * pageSize, totalCount)}</span> of{" "}
-                  <span className="font-medium text-foreground">{totalCount}</span> documents
-                </>
-              ) : (
-                "No documents found"
-              )}
-            </div>
-            
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Rows per page</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setPageIndex(0);
-                  }}
-                  className="h-9 w-20 rounded-md border border-input bg-background text-sm font-medium px-3 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                >
-                  {[10, 20, 50, 100].map((size) => (
-                    <option key={size} value={size}>
-                      {size}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">
-                  Page <span className="font-medium text-foreground">{pageIndex + 1}</span> of <span className="font-medium text-foreground">{totalPages || 1}</span>
-                </span>
-                <div className="flex gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pageIndex === 0}
-                    onClick={() => setPageIndex(0)}
-                    className="hidden sm:inline-flex h-9"
-                  >
-                    First
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pageIndex === 0}
-                    onClick={() => setPageIndex((prev) => Math.max(prev - 1, 0))}
-                    className="h-9"
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={(pageIndex + 1) * pageSize >= totalCount}
-                    onClick={() => setPageIndex((prev) => prev + 1)}
-                    className="h-9"
-                  >
-                    Next
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={(pageIndex + 1) * pageSize >= totalCount}
-                    onClick={() => setPageIndex(totalPages - 1)}
-                    className="hidden sm:inline-flex h-9"
-                  >
-                    Last
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <DocumentsPagination
+            totalCount={totalCount}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            setPageSize={setPageSize}
+            setPageIndex={setPageIndex}
+            totalPages={totalPages}
+          />
         )}
       </div>
+
+      <DocumentDetailsModal
+        isOpen={isDetailsOpen}
+        onClose={() => { setIsDetailsOpen(false); setSelectedDoc(null); }}
+        doc={selectedDoc as any}
+        formatFileSize={formatFileSize}
+        onDownload={handleDownload as any}
+      />
     </div>
   );
 }

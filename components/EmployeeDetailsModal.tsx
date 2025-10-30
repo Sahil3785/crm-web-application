@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -130,10 +131,26 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
   const [activeTab, setActiveTab] = useState("detail");
   const [activeDocTab, setActiveDocTab] = useState("submitted");
   const [addDocModalOpen, setAddDocModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editSection, setEditSection] = useState<"personal" | "employment" | "management" | "all">("all");
+  const [editJobTitle, setEditJobTitle] = useState("");
+  const [editEmploymentType, setEditEmploymentType] = useState("");
+  const [editWorkMode, setEditWorkMode] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+  const [editMonthlyPayroll, setEditMonthlyPayroll] = useState<string>("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editPhone, setEditPhone] = useState("");
+  const [editPersonalEmail, setEditPersonalEmail] = useState("");
+  const [editDob, setEditDob] = useState<string>("");
+  const [editLinkedin, setEditLinkedin] = useState("");
+  const [editDepartment, setEditDepartment] = useState<string>("");
+  const [editManagerId, setEditManagerId] = useState<string>("");
+  const [editJoiningDate, setEditJoiningDate] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM format
   const [callsDate, setCallsDate] = useState("");
   const [callsSearch, setCallsSearch] = useState("");
+  const [departments, setDepartments] = useState<{ whalesync_postgres_id: string; department_name: string }[]>([]);
   
   // Add Document Form States
   const [docName, setDocName] = useState("");
@@ -181,12 +198,26 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
       }
 
       setEmployeeData(employee);
+      // prefill edit fields
+      setEditJobTitle(employee.job_title || "");
+      setEditEmploymentType(employee.employment_type || "");
+      setEditWorkMode(employee.work_mode || "");
+      setEditStatus(employee.status || "");
+      setEditMonthlyPayroll((employee.monthly_payroll ?? "").toString());
+      setEditPhone(employee.official_contact_number || "");
+      setEditPersonalEmail(employee.personal_email || "");
+      setEditDob(employee.dob || "");
+      setEditLinkedin(employee.linkedin_profile || "");
+      setEditDepartment(employee.department || "");
+      setEditManagerId(employee.reporting_manager || "");
+      setEditJoiningDate(employee.date_of_joining || "");
 
       const [
         { data: employeesData },
         { data: callsData },
         { data: attendanceData },
         { data: documentsData },
+        { data: deptData },
       ] = await Promise.all([
         supabase.from("Employee Directory").select(`
           *,
@@ -195,12 +226,14 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
         supabase.from("Calls").select("*").eq("employee", employeeUUID).order("call_date", { ascending: false }),
         supabase.from("Attendance").select("*").eq("employee", employeeUUID).order("date", { ascending: false }),
         supabase.from("Employee Documents").select("*").eq("employee", employeeUUID),
+        supabase.from("Departments").select("whalesync_postgres_id, department_name").order("department_name"),
       ]);
 
       setAllEmployees(employeesData || []);
       setCalls(callsData || []);
       setAttendance(attendanceData || []);
       setDocuments(documentsData || []);
+      setDepartments((deptData as any) || []);
     } catch (err: any) {
       console.error("Error loading data:", err);
       toast.error("Failed to load employee data");
@@ -226,6 +259,41 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
 
   const getDepartmentName = () => {
     return employeeData?.department_data?.department_name || "N/A";
+  };
+
+  const handleSaveEdit = async () => {
+    if (!employeeData?.whalesync_postgres_id) return;
+    setIsSavingEdit(true);
+    try {
+      const payload: any = {
+        job_title: editJobTitle || null,
+        employment_type: editEmploymentType || null,
+        work_mode: editWorkMode || null,
+        status: editStatus || null,
+      };
+      const salaryNum = Number(editMonthlyPayroll);
+      if (!isNaN(salaryNum)) payload.monthly_payroll = salaryNum;
+      payload.official_contact_number = editPhone || null;
+      payload.personal_email = editPersonalEmail || null;
+      payload.dob = editDob || null;
+      payload.linkedin_profile = editLinkedin || null;
+      payload.date_of_joining = editJoiningDate || null;
+      if (editDepartment) payload.department = editDepartment;
+      if (editManagerId) payload.reporting_manager = editManagerId;
+
+      const { error } = await supabase
+        .from("Employee Directory")
+        .update(payload)
+        .eq("whalesync_postgres_id", employeeData.whalesync_postgres_id);
+      if (error) throw error;
+      toast.success("Employee updated");
+      setEditModalOpen(false);
+      await loadEmployeeData();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update employee");
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const handleDownloadDocument = (url: string, filename: string) => {
@@ -357,6 +425,33 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
   const manager = getManager();
   const directReports = getDirectReports();
 
+  const handleExportAttendance = () => {
+    try {
+      const rows = [
+        ['Date', 'Status'],
+        ...filteredAttendance.map((r) => [
+          new Date(r.date + 'T00:00:00').toLocaleDateString('en-GB'),
+          r.status,
+        ]),
+      ];
+      const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const labelMonth = new Date(selectedMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const name = employeeData?.full_name?.replace(/[^a-z0-9]+/gi, '_') || 'employee';
+      a.href = url;
+      a.download = `attendance_${name}_${labelMonth}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Attendance exported');
+    } catch (e) {
+      toast.error('Failed to export attendance');
+    }
+  };
+
   if (!employeeData && !loading) return null;
 
   return (
@@ -374,18 +469,20 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
         ) : (
           <div className="overflow-hidden h-[calc(90vh-5rem)]">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col">
-              <div className="border-b px-6 sticky top-0 bg-background z-10 flex-shrink-0">
-                <TabsList className="bg-transparent h-auto p-0 w-full justify-start overflow-x-auto">
+              <div className="px-6 sticky top-0 bg-background z-10 flex-shrink-0">
+                <div className="bg-muted/60 rounded-lg p-1 w-full overflow-x-auto">
+                <TabsList className="bg-transparent h-auto p-0 w-full justify-start gap-2">
                   {["detail", "document", "payroll", "attendance", "calls"].map((tab) => (
                     <TabsTrigger
                       key={tab}
                       value={tab}
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none bg-transparent px-4 py-3 capitalize text-sm font-medium"
+                      className="px-4 py-2 rounded-md capitalize text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:bg-background/60"
                     >
                       {tab === "calls" ? `Calls (${calls.length})` : tab}
                     </TabsTrigger>
                   ))}
                 </TabsList>
+                </div>
               </div>
 
               <div className="p-6 overflow-y-auto flex-1">
@@ -404,7 +501,7 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
                           <p className="text-lg text-muted-foreground">{employeeData?.job_title || "No Position"}</p>
                           <p className="text-sm text-muted-foreground">{employeeData?.official_email}</p>
                         </div>
-                        <Button variant="outline" size="sm" className="h-8">
+                        <Button variant="outline" size="sm" className="h-8" onClick={() => setEditModalOpen(true)}>
                           <Edit2 className="h-4 w-4 mr-2" />
                           Edit
                         </Button>
@@ -427,7 +524,12 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
                     {/* Personal Information */}
                     <Card>
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Personal Information</CardTitle>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base">Personal Information</CardTitle>
+                          <Button variant="ghost" size="sm" onClick={() => { setEditSection("personal"); setEditModalOpen(true); }} className="h-7">
+                            <Edit2 className="h-4 w-4 mr-1" /> Edit
+                          </Button>
+                        </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         <div className="flex items-center justify-between">
@@ -466,7 +568,12 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
                     {/* Employment Information */}
                     <Card>
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Employment Details</CardTitle>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base">Employment Details</CardTitle>
+                          <Button variant="ghost" size="sm" onClick={() => { setEditSection("employment"); setEditModalOpen(true); }} className="h-7">
+                            <Edit2 className="h-4 w-4 mr-1" /> Edit
+                          </Button>
+                        </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         <div className="flex items-center justify-between">
@@ -499,7 +606,12 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
                     {/* Management Information */}
                     <Card>
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Management</CardTitle>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base">Management</CardTitle>
+                          <Button variant="ghost" size="sm" onClick={() => { setEditSection("management"); setEditModalOpen(true); }} className="h-7">
+                            <Edit2 className="h-4 w-4 mr-1" /> Edit
+                          </Button>
+                        </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         <div className="flex items-center justify-between">
@@ -706,10 +818,7 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
 
                 {/* Payroll Tab */}
                 <TabsContent value="payroll" className="mt-0">
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold mb-2">Payroll Information</h3>
-                    <p className="text-sm text-muted-foreground">Current salary details and payment history</p>
-                  </div>
+                  {/* Payroll Information heading removed */}
 
                   {/* Payroll Summary Cards */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -846,10 +955,9 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
 
                 {/* Attendance Tab */}
                 <TabsContent value="attendance" className="mt-0">
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold mb-2">Attendance Management</h3>
-                    <p className="text-sm text-muted-foreground">Track employee attendance and working hours</p>
-                  </div>
+                  {/* Heading removed per request */}
+
+                  
 
                   {/* Attendance Summary */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -875,7 +983,7 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm text-muted-foreground">Present</p>
-                            <p className="text-2xl font-bold text-green-600">
+                            <p className="text-2xl font-bold text-foreground">
                               {filteredAttendance.filter(a => a.status === 'Present').length}
                             </p>
                             <p className="text-xs text-muted-foreground">
@@ -894,7 +1002,7 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm text-muted-foreground">Late</p>
-                            <p className="text-2xl font-bold text-yellow-600">
+                            <p className="text-2xl font-bold text-foreground">
                               {filteredAttendance.filter(a => a.status === 'Late').length}
                             </p>
                             <p className="text-xs text-muted-foreground">
@@ -913,7 +1021,7 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm text-muted-foreground">Absent</p>
-                            <p className="text-2xl font-bold text-red-600">
+                            <p className="text-2xl font-bold text-foreground">
                               {filteredAttendance.filter(a => a.status === 'Absent').length}
                             </p>
                             <p className="text-xs text-muted-foreground">
@@ -928,101 +1036,55 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
                     </Card>
                   </div>
 
-                  {/* Date Selector */}
-                  <Card className="mb-6">
-                    <CardHeader>
-                      <CardTitle className="text-base">Check Attendance by Date</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center space-x-4">
-                        <div className="flex-1">
-                          <Label htmlFor="attendance-date" className="text-sm font-medium">
-                            Select Date
-                          </Label>
-                          <Input
-                            id="attendance-date"
-                            type="date"
-                            value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            className="mt-1"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          {selectedDateRecord ? (
-                            <div className="flex items-center space-x-2">
-                              <span className="text-sm text-muted-foreground">Status:</span>
-                              {getStatusBadge(selectedDateRecord.status)}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              No record for {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long" })}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Month Filter */}
-                  <Card className="mb-6">
-                    <CardHeader>
-                      <CardTitle className="text-base">Filter by Month</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center space-x-4">
-                        <div className="flex-1">
-                          <Label htmlFor="month-filter" className="text-sm font-medium">
-                            Select Month
-                          </Label>
-                          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Select month" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableMonths.length > 0 ? (
-                                availableMonths.map((month) => {
-                                  const date = new Date(month + '-01');
-                                  const monthName = date.toLocaleDateString('en-US', { 
-                                    year: 'numeric', 
-                                    month: 'long' 
-                                  });
-                                  return (
-                                    <SelectItem key={month} value={month}>
-                                      {monthName}
-                                    </SelectItem>
-                                  );
-                                })
-                              ) : (
-                                <SelectItem value={selectedMonth}>
-                                  {new Date(selectedMonth + '-01').toLocaleDateString('en-US', { 
-                                    year: 'numeric', 
-                                    month: 'long' 
-                                  })}
-                                </SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-sm text-muted-foreground">
-                            <p className="font-medium">Records for selected month: {filteredAttendance.length}</p>
-                            <p className="text-xs">
-                              {new Date(selectedMonth + '-01').toLocaleDateString('en-US', { 
-                                year: 'numeric', 
-                                month: 'long' 
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  
 
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold">Attendance History</h3>
-                    <Button variant="outline" size="sm">
-                      Export Records
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <Label htmlFor="attendance-date" className="sr-only">Select Date</Label>
+                        <DatePicker
+                          date={selectedDate ? new Date(selectedDate + 'T00:00:00') : undefined}
+                          onDateChange={(d) => {
+                            if (!d) { setSelectedDate(''); return; }
+                            const y = d.getFullYear();
+                            const m = String(d.getMonth() + 1).padStart(2, '0');
+                            const day = String(d.getDate()).padStart(2, '0');
+                            setSelectedDate(`${y}-${m}-${day}`);
+                          }}
+                          placeholder="Pick a date"
+                          className="h-9"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="month-filter" className="sr-only">Select Month</Label>
+                        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                          <SelectTrigger className="h-9 w-[170px]">
+                            <SelectValue placeholder="Select month" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableMonths.length > 0 ? (
+                              availableMonths.map((month) => {
+                                const date = new Date(month + '-01');
+                                const monthName = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+                                return (
+                                  <SelectItem key={month} value={month}>
+                                    {monthName}
+                                  </SelectItem>
+                                );
+                              })
+                            ) : (
+                              <SelectItem value={selectedMonth}>
+                                {new Date(selectedMonth + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="self-end">
+                        <Button variant="outline" size="sm" onClick={handleExportAttendance}>Export Records</Button>
+                      </div>
+                    </div>
                   </div>
 
                   <Card>
@@ -1079,10 +1141,7 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
 
                 {/* Calls Tab */}
                 <TabsContent value="calls" className="mt-0">
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold mb-2">Call Management</h3>
-                    <p className="text-sm text-muted-foreground">Track employee call logs and communication history</p>
-                  </div>
+                  {/* Call Management heading removed */}
 
                   {/* Call Statistics */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -1130,46 +1189,37 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
                   </div>
 
                   {/* Filters */}
-                  <Card className="mb-6">
-                    <CardHeader>
-                      <CardTitle className="text-base">Filter & Search</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="calls-date" className="text-sm font-medium">
-                            Filter by Date
-                          </Label>
-                          <Input 
-                            id="calls-date" 
-                            type="date" 
-                            value={callsDate} 
-                            onChange={(e) => setCallsDate(e.target.value)} 
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="calls-search" className="text-sm font-medium">
-                            Search by Name or Number
-                          </Label>
-                          <Input
-                            id="calls-search"
-                            type="text"
-                            placeholder="Search calls..."
-                            value={callsSearch}
-                            onChange={(e) => setCallsSearch(e.target.value)}
-                            className="mt-1"
-                          />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  {/* Filters moved to Call History header */}
 
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold">Call History</h3>
-                    <Button variant="outline" size="sm">
-                      Export Logs
-                    </Button>
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1 md:w-[360px]">
+                        <Label htmlFor="calls-search" className="sr-only">Search by Name or Number</Label>
+                        <Input
+                          id="calls-search"
+                          type="text"
+                          placeholder="Search calls..."
+                          value={callsSearch}
+                          onChange={(e) => setCallsSearch(e.target.value)}
+                        />
+                      </div>
+                      <div className="w-full md:w-auto">
+                        <Label htmlFor="calls-date" className="sr-only">Filter by Date</Label>
+                        <DatePicker
+                          date={callsDate ? new Date(callsDate + 'T00:00:00') : undefined}
+                          onDateChange={(d) => {
+                            if (!d) { setCallsDate(''); return; }
+                            const y = d.getFullYear();
+                            const m = String(d.getMonth() + 1).padStart(2, '0');
+                            const day = String(d.getDate()).padStart(2, '0');
+                            setCallsDate(`${y}-${m}-${day}`);
+                          }}
+                          placeholder="Pick a date"
+                        />
+                      </div>
+                      <Button variant="outline" size="sm">Export Logs</Button>
+                    </div>
                   </div>
 
                   <Card>
@@ -1316,6 +1366,121 @@ export function EmployeeDetailsModal({ employeeId, open, onClose }: EmployeeDeta
                 )}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Employee Modal */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Employee</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Job Title</Label>
+              <Input value={editJobTitle} onChange={(e)=>setEditJobTitle(e.target.value)} placeholder="e.g., Marketing Executive" />
+            </div>
+            <div>
+              <Label>Employment Type</Label>
+              <Select value={editEmploymentType} onValueChange={setEditEmploymentType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FTE">FTE</SelectItem>
+                  <SelectItem value="PTE">PTE</SelectItem>
+                  <SelectItem value="Contract">Contract</SelectItem>
+                  <SelectItem value="Intern">Intern</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Work Mode</Label>
+              <Select value={editWorkMode} onValueChange={setEditWorkMode}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="On-Site">On-Site</SelectItem>
+                  <SelectItem value="Remote">Remote</SelectItem>
+                  <SelectItem value="Hybrid">Hybrid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={editStatus} onValueChange={setEditStatus}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Onboarding">Onboarding</SelectItem>
+                  <SelectItem value="Resigned">Resigned</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Monthly Payroll</Label>
+              <Input value={editMonthlyPayroll} onChange={(e)=>setEditMonthlyPayroll(e.target.value)} placeholder="e.g., 50000" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+            <div>
+              <Label>Phone</Label>
+              <Input value={editPhone} onChange={(e)=>setEditPhone(e.target.value)} placeholder="e.g., +91 9000000000" />
+            </div>
+            <div>
+              <Label>Personal Email</Label>
+              <Input type="email" value={editPersonalEmail} onChange={(e)=>setEditPersonalEmail(e.target.value)} placeholder="name@example.com" />
+            </div>
+            <div>
+              <Label>Date of Birth</Label>
+              <Input type="date" value={editDob} onChange={(e)=>setEditDob(e.target.value)} />
+            </div>
+            <div>
+              <Label>Joining Date</Label>
+              <Input type="date" value={editJoiningDate} onChange={(e)=>setEditJoiningDate(e.target.value)} />
+            </div>
+            <div>
+              <Label>LinkedIn</Label>
+              <Input value={editLinkedin} onChange={(e)=>setEditLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+            <div>
+              <Label>Department</Label>
+              <Select value={editDepartment} onValueChange={setEditDepartment}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {departments.map((d)=> (
+                    <SelectItem key={d.whalesync_postgres_id} value={d.whalesync_postgres_id}>{d.department_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Manager</Label>
+              <Select value={editManagerId} onValueChange={setEditManagerId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select manager" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allEmployees.map((e)=> (
+                    <SelectItem key={e.whalesync_postgres_id} value={e.whalesync_postgres_id}>{e.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={()=>setEditModalOpen(false)} disabled={isSavingEdit}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={isSavingEdit}>
+              {isSavingEdit ? "Saving..." : "Save"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

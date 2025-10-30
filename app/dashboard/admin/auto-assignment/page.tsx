@@ -5,54 +5,15 @@ import { supabase } from '@/lib/supabaseClient';
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Progress } from "@/components/ui/progress";
-import { 
-  Loader2, 
-  Users, 
-  Settings, 
-  Zap, 
-  CheckCircle, 
-  AlertCircle, 
-  User, 
-  Palette, 
-  Building2, 
-  Truck, 
-  FileText, 
-  Video,
-  Clock,
-  Target,
-  BarChart3,
-  RefreshCw,
-  Save,
-  Trash2,
-  ChevronDown,
-  ChevronUp,
-  Sparkles
-} from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-interface EmployeeFields {
-  whalesync_postgres_id: string;
-  full_name: string;
-  job_title?: string;
-  profile_photo?: string;
-}
-
-interface LeadFields {
-  whalesync_postgres_id: string;
-  services?: string;
-  assigned_to?: string;
-  [key: string]: any;
-}
-
-interface SavedConfig {
-  [serviceName: string]: string[];
-}
+import AutoAssignmentStatsCards from "./components/AutoAssignmentStatsCards";
+import ServiceConfigurationCard from "./components/ServiceConfigurationCard";
+import AssignmentEngineCard from "./components/AssignmentEngineCard";
+import QuickStatsCard from "./components/QuickStatsCard";
+import { EmployeeFields, LeadFields, SavedConfig } from "./components/types";
+import { getServiceIcon, getTotalAssignedEmployees, getServiceStats } from "./components/utils";
 
 const AutoAssignmentPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -69,25 +30,6 @@ const AutoAssignmentPage: React.FC = () => {
 
   const todayKey = 'service_mapping_' + new Date().toISOString().slice(0, 10);
 
-  // Function to get service icon based on service name
-  const getServiceIcon = (serviceName: string) => {
-    const service = serviceName.toLowerCase();
-    
-    if (service.includes('brand') || service.includes('development')) {
-      return <Palette className="w-5 h-5 text-purple-600" />;
-    } else if (service.includes('canton')) {
-      return <Building2 className="w-5 h-5 text-blue-600" />;
-    } else if (service.includes('dropshipping')) {
-      return <Truck className="w-5 h-5 text-green-600" />;
-    } else if (service.includes('llc') || service.includes('formation')) {
-      return <FileText className="w-5 h-5 text-orange-600" />;
-    } else if (service.includes('video') || service.includes('call')) {
-      return <Video className="w-5 h-5 text-red-600" />;
-    } else {
-      return <Settings className="w-5 h-5 text-gray-600" />;
-    }
-  };
-
   // Helper functions for UI management
   const toggleServiceExpansion = (serviceName: string) => {
     const newExpanded = new Set(expandedServices);
@@ -97,18 +39,6 @@ const AutoAssignmentPage: React.FC = () => {
       newExpanded.add(serviceName);
     }
     setExpandedServices(newExpanded);
-  };
-
-  const getTotalAssignedEmployees = () => {
-    return Object.values(config).reduce((total, employees) => total + employees.length, 0);
-  };
-
-  const getServiceStats = () => {
-    const totalServices = services.length;
-    const configuredServices = Object.keys(config).filter(service => 
-      config[service] && config[service].length > 0
-    ).length;
-    return { totalServices, configuredServices };
   };
 
   useEffect(() => {
@@ -452,10 +382,8 @@ const AutoAssignmentPage: React.FC = () => {
     );
   }
 
-  const formattedDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-
-  const stats = getServiceStats();
-  const totalAssigned = getTotalAssignedEmployees();
+  const stats = getServiceStats(services, config);
+  const totalAssigned = getTotalAssignedEmployees(config);
 
   return (
     <SidebarProvider>
@@ -471,283 +399,51 @@ const AutoAssignmentPage: React.FC = () => {
 
           <div className="flex-1 overflow-y-auto">
             <div className="w-full px-4 py-2">
-
               {/* Stats Cards */}
-              <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs md:grid-cols-2 lg:grid-cols-4 mb-2">
-                <Card className="@container/card">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Total Services
-                    </CardTitle>
-                    <Target className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{stats.totalServices}</div>
-                  </CardContent>
-                </Card>
-
-                <Card className="@container/card">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Configured
-                    </CardTitle>
-                    <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{stats.configuredServices}</div>
-                  </CardContent>
-                </Card>
-
-                <Card className="@container/card">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Assigned Employees
-                    </CardTitle>
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{totalAssigned}</div>
-                  </CardContent>
-                </Card>
-
-                <Card className="@container/card">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Available Staff
-                    </CardTitle>
-                    <User className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{employees.length}</div>
-                          </CardContent>
-                        </Card>
-                  </div>
+              <AutoAssignmentStatsCards
+                totalServices={stats.totalServices}
+                configuredServices={stats.configuredServices}
+                totalAssigned={totalAssigned}
+                availableStaff={employees.length}
+              />
 
               {/* Main Content Grid */}
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-2">
                 {/* Service Configuration */}
                 <div className="xl:col-span-2">
-                  <Card>
-                    <CardHeader className="pb-0 pt-0">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="flex items-center gap-2">
-                          <Settings className="h-5 w-5" />
-                          Service Configuration
-                        </CardTitle>
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={handleClearConfig}
-                            variant="outline"
-                            size="sm"
-                            className="gap-2 hover:bg-destructive/10 hover:border-destructive/50 hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Clear All
-                          </Button>
-                          <Button
-                            onClick={handleSaveConfig}
-                            disabled={isSaving}
-                            size="sm"
-                            className="gap-2"
-                          >
-                            {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                            <Save className="h-4 w-4" />
-                            {saveMessage}
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2 pt-0">
-                      {services.length === 0 ? (
-                        <div className="text-center py-12">
-                          <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                            <AlertCircle className="h-8 w-8 text-muted-foreground" />
-                          </div>
-                          <h3 className="text-lg font-semibold text-foreground mb-2">No Services Found</h3>
-                          <p className="text-muted-foreground">No services are available in the database.</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {services.map((serviceName, index) => {
-                            const isExpanded = expandedServices.has(serviceName);
-                            const assignedCount = config[serviceName]?.length || 0;
-                            
-                            return (
-                              <Card key={serviceName} className="hover:shadow-md transition-shadow">
-                                <CardContent className="p-0">
-                                  <div 
-                                    className="py-0.5 px-4 cursor-pointer hover:bg-muted/50 transition-colors"
-                                    onClick={() => toggleServiceExpansion(serviceName)}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-4">
-                                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                                          {getServiceIcon(serviceName)}
-                    </div>
-                    <div>
-                                          <h3 className="font-semibold">{serviceName}</h3>
-                                          <p className="text-sm text-muted-foreground">Service #{index + 1}</p>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-4">
-                                        <Badge variant={assignedCount > 0 ? "default" : "secondary"} className="gap-1">
-                                          <Users className="h-3 w-3" />
-                                          {assignedCount} assigned
-                                        </Badge>
-                                        {isExpanded ? (
-                                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                                        ) : (
-                                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  
-                                  {isExpanded && (
-                                    <>
-                                      <Separator />
-                                      <div className="p-4">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                          {employees.map(emp => {
-                                            const isSelected = config[serviceName]?.includes(emp.whalesync_postgres_id) ?? false;
-                                            
-                                            return (
-                                              <label
-                                                key={emp.whalesync_postgres_id}
-                                                className={`group relative flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-md ${
-                                                  isSelected 
-                                                    ? 'border-primary bg-primary/5 shadow-sm' 
-                                                    : 'border-border hover:border-primary/50 hover:bg-primary/5'
-                                                }`}
-                                              >
-                                                <input
-                                                  type="checkbox"
-                                                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary focus:ring-offset-1"
-                                                  checked={isSelected}
-                                                  onChange={() => handleCheckboxChange(serviceName, emp.whalesync_postgres_id)}
-                                                />
-                                                <Avatar className="h-8 w-8">
-                                                  <AvatarImage src={emp.profile_photo || ""} alt={emp.full_name} />
-                                                  <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                                                    {emp.full_name.slice(0, 2).toUpperCase()}
-                                                  </AvatarFallback>
-                                                </Avatar>
-                                                <div className="flex-1 min-w-0">
-                                                  <p className="font-medium text-sm text-foreground truncate">
-                                                    {emp.full_name}
-                                                  </p>
-                                                  <p className="text-xs text-muted-foreground truncate">
-                                                    {emp.job_title || 'Sales Representative'}
-                                                  </p>
-                                                </div>
-                                                {isSelected && (
-                                                  <CheckCircle className="h-4 w-4 text-primary" />
-                                                )}
-                                              </label>
-                                            );
-                                          })}
-                    </div>
-                  </div>
-                                    </>
-                                  )}
-                                </CardContent>
-                              </Card>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <ServiceConfigurationCard
+                    services={services}
+                    employees={employees}
+                    config={config}
+                    expandedServices={expandedServices}
+                    isSaving={isSaving}
+                    saveMessage={saveMessage}
+                    onToggleServiceExpansion={toggleServiceExpansion}
+                    onCheckboxChange={handleCheckboxChange}
+                    onSaveConfig={handleSaveConfig}
+                    onClearConfig={handleClearConfig}
+                    getServiceIcon={getServiceIcon}
+                  />
                 </div>
 
                 {/* Assignment Engine */}
                 <div className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Zap className="h-5 w-5" />
-                        Assignment Engine
-                      </CardTitle>
-                </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="p-4 bg-muted/50 rounded-lg border">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="h-8 w-8 rounded-full bg-green-500/20 flex items-center justify-center">
-                            <Sparkles className="h-4 w-4 text-green-600" />
-                        </div>
-                        <div>
-                            <h4 className="font-semibold">Ready to Execute</h4>
-                            <p className="text-sm text-muted-foreground">Round-robin distribution active</p>
-                        </div>
-                      </div>
-                      <Button
-                        onClick={handleRunAssignment}
-                        disabled={isAssigning}
-                          className="w-full gap-2"
-                          size="lg"
-                      >
-                          {isAssigning && <Loader2 className="h-4 w-4 animate-spin" />}
-                          <Zap className="h-4 w-4" />
-                        {isAssigning ? 'Processing...' : 'Run Assignment'}
-                      </Button>
-                    </div>
-                    
-                    {assignmentLog && (
-                        <div className="p-4 bg-muted/50 rounded-lg border">
-                          <div className="flex items-center gap-2 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
-                            <span className="text-sm font-medium text-foreground">Assignment Status</span>
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {assignmentLog}
-                          </div>
-                        </div>
-                      )}
-
-                      {isAssigning && (
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Processing...</span>
-                            <span className="text-muted-foreground">{assignmentProgress}%</span>
-                          </div>
-                          <Progress value={assignmentProgress} className="h-2" />
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <AssignmentEngineCard
+                    isAssigning={isAssigning}
+                    assignmentProgress={assignmentProgress}
+                    assignmentLog={assignmentLog}
+                    onRunAssignment={handleRunAssignment}
+                  />
 
                   {/* Quick Stats */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <BarChart3 className="h-5 w-5" />
-                        Quick Stats
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Total Services</span>
-                        <Badge variant="outline">{stats.totalServices}</Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Configured</span>
-                        <Badge variant={stats.configuredServices > 0 ? "default" : "secondary"}>
-                          {stats.configuredServices}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Assigned Employees</span>
-                        <Badge variant="outline">{totalAssigned}</Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Available Staff</span>
-                        <Badge variant="outline">{employees.length}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
+                  <QuickStatsCard
+                    totalServices={stats.totalServices}
+                    configuredServices={stats.configuredServices}
+                    totalAssigned={totalAssigned}
+                    availableStaff={employees.length}
+                  />
                 </div>
               </div>
-
 
               {/* Footer */}
               <div className="mt-12 text-center">
@@ -764,4 +460,3 @@ const AutoAssignmentPage: React.FC = () => {
 };
 
 export default AutoAssignmentPage;
-

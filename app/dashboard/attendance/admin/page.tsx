@@ -4,56 +4,23 @@ import { useState, useEffect } from "react";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { toast } from "sonner";
-import { 
-  Users, 
-  TrendingUp, 
-  AlertTriangle, 
-  CheckCircle, 
-  Clock, 
-  Calendar,
-  BarChart3,
-  PieChart,
-  Download,
-  Settings,
-  Eye,
-  Edit,
-  Trash2,
-  Plus,
-  User,
-  Filter,
-  Search,
-  RefreshCw,
-  Bell,
-  Shield,
-  Target,
-  Activity,
-  Zap,
-  ChevronDown,
-  Grid3X3,
-  List,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Building2,
-  DollarSign,
-  CheckSquare
-} from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { toast } from "sonner";
+
+// Import components
+import { AttendanceKPICards } from "./components/AttendanceKPICards";
+import { AttendanceFilters } from "./components/AttendanceFilters";
+import { AttendanceTableView } from "./components/AttendanceTableView";
+import { AttendanceKanbanView } from "./components/AttendanceKanbanView";
+import { AttendanceRankingsView } from "./components/AttendanceRankingsView";
+import { DepartmentStatsView } from "./components/DepartmentStatsView";
+import { ReportsView } from "./components/ReportsView";
+import { SettingsView } from "./components/SettingsView";
+import { EmployeeDetailsModal } from "./components/EmployeeDetailsModal";
+import { ManualAttendanceModal } from "./components/ManualAttendanceModal";
+import { EditAttendanceModal } from "./components/EditAttendanceModal";
 
 interface AttendanceRecord {
   id: string;
@@ -174,7 +141,7 @@ export default function AdminAttendancePage() {
 
   // Function to detect new attendance events and create notifications
   const detectNewAttendanceEvents = (newData: AttendanceRecord[], oldData: AttendanceRecord[]) => {
-    if (!oldData || oldData.length === 0 || !newData || newData.length === 0) return; // Skip on first load or if no data
+    if (!oldData || oldData.length === 0 || !newData || newData.length === 0) return;
     
     const newEvents: Array<{
       id: string;
@@ -184,7 +151,6 @@ export default function AdminAttendancePage() {
       message: string;
     }> = [];
     
-    // Check for new check-ins (time_in was null/empty, now has value)
     newData.forEach(newRecord => {
       const oldRecord = oldData.find(old => 
         old.employee_id === newRecord.employee_id && 
@@ -192,7 +158,6 @@ export default function AdminAttendancePage() {
       );
       
       if (oldRecord) {
-        // New check-in detected
         if (!oldRecord.time_in && newRecord.time_in && newRecord.time_in !== 'N/A') {
           const isLate = newRecord.status === 'Late';
           newEvents.push({
@@ -206,7 +171,6 @@ export default function AdminAttendancePage() {
           });
         }
         
-        // New check-out detected
         if (!oldRecord.time_out && newRecord.time_out && newRecord.time_out !== 'N/A') {
           newEvents.push({
             id: `checkout-${newRecord.id}-${Date.now()}`,
@@ -219,11 +183,9 @@ export default function AdminAttendancePage() {
       }
     });
     
-    // Add new notifications
     if (newEvents.length > 0) {
-      setNotifications(prev => [...newEvents, ...prev].slice(0, 10)); // Keep last 10 notifications
+      setNotifications(prev => [...newEvents, ...prev].slice(0, 10));
       
-      // Show toast notifications
       newEvents.forEach(event => {
         if (event.type === 'checkin') {
           toast.success(event.message);
@@ -241,10 +203,8 @@ export default function AdminAttendancePage() {
       setLoading(true);
       console.log("Loading real attendance data from Supabase...");
       
-      // Import Supabase client
       const { supabase } = await import('@/lib/supabaseClient');
       
-      // Fetch employees from Employee Directory
       const { data: employeesData, error: employeesError } = await supabase
         .from('Employee Directory')
         .select(`
@@ -260,100 +220,22 @@ export default function AdminAttendancePage() {
       
       if (employeesError) {
         console.error('Error fetching employees:', employeesError);
-        console.error('Employee error details:', {
-          message: employeesError.message,
-          code: employeesError.code,
-          hint: employeesError.hint,
-          details: employeesError.details
-        });
         throw employeesError;
       }
       
       console.log("Successfully fetched employees:", employeesData?.length || 0, "records");
       
-      // Fetch departments - try different table names
-      let departmentsData = null;
-      let departmentsError = null;
+      const transformedEmployees = employeesData?.map(emp => ({
+        whalesync_postgres_id: emp.whalesync_postgres_id,
+        full_name: emp.full_name,
+        employee_id: emp.employee_id,
+        job_title: emp.job_title || 'No Job Title',
+        profile_photo: emp.profile_photo,
+        official_email: emp.official_email
+      })) || [];
       
-      // Try 'Departments' table first
-      const { data: deptData, error: deptError } = await supabase
-        .from('Departments')
-        .select('whalesync_postgres_id, department_name, display_name');
-      
-      if (deptError) {
-        console.log('Departments table not found, trying alternative...');
-        // Try 'Teams' table as fallback
-        const { data: teamData, error: teamError } = await supabase
-          .from('Teams')
-          .select('whalesync_postgres_id, team_name');
-        
-        if (teamError) {
-          console.log('Teams table not found, using empty departments...');
-          departmentsData = [];
-          departmentsError = null;
-        } else {
-          departmentsData = teamData;
-          departmentsError = null;
-        }
-      } else {
-        departmentsData = deptData;
-        departmentsError = deptError;
-      }
-      
-      if (departmentsError) {
-        console.error('Error fetching departments:', departmentsError);
-        console.error('Department error details:', {
-          message: departmentsError.message,
-          code: departmentsError.code,
-          hint: departmentsError.hint,
-          details: departmentsError.details
-        });
-        throw departmentsError;
-      }
-      
-      console.log("Successfully fetched departments:", departmentsData?.length || 0, "records");
-      
-      // Create department lookup - handle both Departments and Teams table structures
-      const departmentLookup = {};
-      departmentsData?.forEach(dept => {
-        // Handle Departments table structure
-        if (dept.department_name) {
-          departmentLookup[dept.whalesync_postgres_id] = dept.department_name;
-          departmentLookup[dept.department_name] = dept.department_name;
-          if (dept.display_name) {
-            departmentLookup[dept.display_name] = dept.department_name;
-          }
-        }
-        // Handle Teams table structure
-        else if (dept.team_name) {
-          departmentLookup[dept.whalesync_postgres_id] = dept.team_name;
-          departmentLookup[dept.team_name] = dept.team_name;
-        }
-      });
-      
-      console.log("Department lookup created:", departmentLookup);
-      console.log("Departments data:", departmentsData);
-      console.log("Sample employee data:", employeesData?.slice(0, 3));
-      console.log("Available team IDs:", departmentsData?.map(d => d.whalesync_postgres_id));
-      console.log("Employee department IDs:", employeesData?.map(e => e.department).filter(Boolean));
-      
-      // Transform employees data
-      const transformedEmployees = employeesData?.map(emp => {
-        console.log(`Employee ${emp.full_name}: job_title = "${emp.job_title}"`);
-        return {
-          whalesync_postgres_id: emp.whalesync_postgres_id,
-          full_name: emp.full_name,
-          employee_id: emp.employee_id,
-          job_title: emp.job_title || 'No Job Title',
-          profile_photo: emp.profile_photo,
-          official_email: emp.official_email
-        };
-      }) || [];
-      
-      console.log("Real employees:", transformedEmployees);
       setEmployees(transformedEmployees);
       
-      // Fetch attendance data
       const { data: attendanceData, error: attendanceError } = await supabase
         .from('Attendance')
         .select(`
@@ -370,33 +252,16 @@ export default function AdminAttendancePage() {
           full_name_from_employee
         `)
         .order('date', { ascending: false })
-        .limit(200); // Get more records for admin view
+        .limit(200);
       
       if (attendanceError) {
         console.error('Error fetching attendance:', attendanceError);
-        console.error('Attendance error details:', {
-          message: attendanceError.message,
-          code: attendanceError.code,
-          hint: attendanceError.hint,
-          details: attendanceError.details
-        });
         throw attendanceError;
       }
       
       console.log("Successfully fetched attendance records:", attendanceData?.length || 0, "records");
       
-      // Debug: Show unique employees in attendance data
-      const uniqueEmployeesInAttendance = [...new Set(attendanceData?.map(record => record.employee_name) || [])];
-      console.log("Unique employees in attendance data:", uniqueEmployeesInAttendance.length);
-      console.log("Employee names in attendance:", uniqueEmployeesInAttendance);
-      
-      // Debug: Show total employees fetched
-      console.log("Total employees fetched from Employee Directory:", transformedEmployees.length);
-      console.log("Employee names from Employee Directory:", transformedEmployees.map(emp => emp.full_name));
-      
-      // Transform attendance data
       const transformedAttendance = attendanceData?.map(record => {
-        // Find the employee's job title from the employees data
         const employee = transformedEmployees.find(emp => 
           emp.whalesync_postgres_id === record.employee || 
           emp.employee_id === record.employee_id_from_employee
@@ -420,36 +285,22 @@ export default function AdminAttendancePage() {
         };
       }) || [];
       
-      console.log("Real attendance data:", transformedAttendance);
-      
       processAttendanceData(transformedAttendance, transformedEmployees);
       
     } catch (error) {
       console.error("Error loading dashboard data:", error);
-      console.error("Error details:", JSON.stringify(error, null, 2));
-      
-      // Show error message and empty state
       setEmployees([]);
       setAttendanceData([]);
       setFilteredData([]);
       setDepartmentStats([]);
       setExceptionAlerts([]);
-      
       toast.error(`Failed to load attendance data: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
   };
 
-
-
-
   const processAttendanceData = (attendance: any[], employees: any[]) => {
-    console.log("Processing attendance data:", attendance);
-    console.log("Processing employees data:", employees);
-    console.log("Attendance length:", attendance?.length);
-    console.log("Employees length:", employees?.length);
-    
     const processedAttendance = attendance.map(record => ({
       id: record.whalesync_postgres_id || record.id,
       employee_name: record.employee_name || record.name || "Unknown",
@@ -466,22 +317,15 @@ export default function AdminAttendancePage() {
       notes: record.notes || ""
     }));
 
-    console.log("Processed attendance:", processedAttendance);
-    console.log("Processed attendance length:", processedAttendance.length);
-    
-    console.log("Setting attendance data to state:", processedAttendance.length, "records");
     setAttendanceData(processedAttendance);
     setFilteredData(processedAttendance);
 
-    // Calculate department stats
     const deptStats = calculateDepartmentStats(processedAttendance, employees);
     setDepartmentStats(deptStats);
 
-    // Generate exception alerts
     const alerts = generateExceptionAlerts(processedAttendance);
     setExceptionAlerts(alerts);
 
-    // Calculate dashboard stats
     const today = new Date().toISOString().split('T')[0];
     const todayAttendance = processedAttendance.filter(r => r.date === today);
     const totalEmployees = employees.length;
@@ -530,7 +374,6 @@ export default function AdminAttendancePage() {
     const monthIndex = monthMap[month];
     const yearNum = parseInt(year);
     
-    // Filter attendance records for the selected month and year
     const monthlyAttendance = attendance.filter(record => {
       const recordDate = new Date(record.date);
       return recordDate.getMonth() === monthIndex && recordDate.getFullYear() === yearNum;
@@ -554,7 +397,6 @@ export default function AdminAttendancePage() {
     const alerts: ExceptionAlert[] = [];
     const today = new Date().toISOString().split('T')[0];
 
-    // Generate deterministic exception alerts
     alerts.push({
       id: 'late_1',
       type: 'late_marking',
@@ -594,7 +436,6 @@ export default function AdminAttendancePage() {
   const applyFilters = () => {
     let filtered = [...attendanceData];
 
-    // Search filter
     if (searchTerm) {
       filtered = filtered.filter(record => 
         record.employee_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -602,17 +443,14 @@ export default function AdminAttendancePage() {
       );
     }
 
-    // Status filter
     if (statusFilter.length > 0) {
       filtered = filtered.filter(record => statusFilter.includes(record.status));
     }
 
-    // Job Title filter
     if (jobTitleFilter.length > 0) {
       filtered = filtered.filter(record => jobTitleFilter.includes(record.job_title));
     }
 
-    // Time filter (based on date)
     if (timeFilter.length > 0) {
       const today = new Date().toISOString().split('T')[0];
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -626,18 +464,15 @@ export default function AdminAttendancePage() {
       });
     }
 
-    // Sort the filtered data
     filtered.sort((a, b) => {
       let aValue: any = a[sortField as keyof typeof a];
       let bValue: any = b[sortField as keyof typeof b];
 
-      // Handle date sorting
       if (sortField === "date") {
         aValue = new Date(aValue).getTime();
         bValue = new Date(bValue).getTime();
       }
 
-      // Handle numeric sorting
       if (sortField === "working_hours") {
         aValue = parseFloat(aValue) || 0;
         bValue = parseFloat(bValue) || 0;
@@ -657,12 +492,10 @@ export default function AdminAttendancePage() {
     applyFilters();
   }, [selectedDepartment, searchTerm, statusFilter, jobTitleFilter, timeFilter, sortField, sortDirection, attendanceData]);
 
-  // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, jobTitleFilter, timeFilter]);
 
-  // Calculate monthly stats when data or month/year selection changes
   useEffect(() => {
     if (attendanceData.length > 0) {
       const stats = calculateMonthlyStats(attendanceData, selectedMonth, selectedYear);
@@ -670,50 +503,18 @@ export default function AdminAttendancePage() {
     }
   }, [attendanceData, selectedMonth, selectedYear]);
 
-  const getStatusBadge = (status: string) => {
-    const baseClasses = "px-2 py-1 rounded-full text-xs font-medium";
-    switch (status) {
-      case 'Present':
-        return <Badge className="bg-green-100 text-green-800 rounded-full">Present</Badge>;
-      case 'Absent':
-        return <Badge className="bg-red-100 text-red-800 rounded-full">Absent</Badge>;
-      case 'Half Day':
-        return <Badge className="bg-yellow-100 text-yellow-800 rounded-full">Half Day</Badge>;
-      case 'Holiday':
-        return <Badge className="bg-purple-100 text-purple-800 rounded-full">Holiday</Badge>;
-      default:
-        return <Badge className="bg-gray-100 text-gray-800 rounded-full">{status}</Badge>;
-    }
-  };
-
-  const getSeverityBadge = (severity: string) => {
-    switch (severity) {
-      case 'high':
-        return <Badge className="bg-red-100 text-red-800">High</Badge>;
-      case 'medium':
-        return <Badge className="bg-yellow-100 text-yellow-800">Medium</Badge>;
-      case 'low':
-        return <Badge className="bg-green-100 text-green-800">Low</Badge>;
-      default:
-        return <Badge className="bg-gray-100 text-gray-800">{severity}</Badge>;
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
     }
   };
 
   const handleViewRecord = (record: AttendanceRecord) => {
     setSelectedRecord(record);
     setIsDetailsOpen(true);
-  };
-
-
-  const handleResolveException = (alertId: string) => {
-    setExceptionAlerts(prev => 
-      prev.map(alert => 
-        alert.id === alertId 
-          ? { ...alert, status: 'resolved' as const }
-          : alert
-      )
-    );
-    console.log("Resolved exception:", alertId);
   };
 
   const handleEditRecord = (record: AttendanceRecord) => {
@@ -754,8 +555,6 @@ export default function AdminAttendancePage() {
       toast.success(`Attendance updated for ${editingRecord.employee_name}`);
       setIsEditAttendanceOpen(false);
       setEditingRecord(null);
-      
-      // Refresh data
       loadDashboardData();
     } catch (error) {
       console.error("Error updating attendance:", error);
@@ -802,8 +601,6 @@ export default function AdminAttendancePage() {
         timeOut: '17:00',
         notes: ''
       });
-      
-      // Refresh data
       loadDashboardData();
     } catch (error) {
       console.error("Error marking manual attendance:", error);
@@ -835,17 +632,12 @@ export default function AdminAttendancePage() {
     a.click();
     window.URL.revokeObjectURL(url);
     
-    // Show success message
     alert('✅ Attendance data exported successfully!');
   };
 
   const handleGenerateReport = (reportType: string) => {
     try {
       if (reportType === 'monthly') {
-        // Generate Monthly Summary Report
-        console.log('Generating monthly report, departmentStats:', departmentStats);
-        
-        // Use fallback data if departmentStats is empty
         const monthlyData = departmentStats && departmentStats.length > 0 
           ? departmentStats.map(dept => ({
               department: dept.department,
@@ -883,10 +675,6 @@ export default function AdminAttendancePage() {
         alert('📊 Monthly Summary report generated successfully!');
       } 
       else if (reportType === 'trends') {
-        // Generate Trend Analysis Report
-        console.log('Generating trends report, filteredData:', filteredData);
-        
-        // Use fallback data if filteredData is empty
         const trendData = filteredData && filteredData.length > 0 
           ? filteredData.reduce((acc, record) => {
               const date = record.date;
@@ -898,24 +686,18 @@ export default function AdminAttendancePage() {
               else if (record.status === 'Absent') acc[date].absent++;
               else if (record.status === 'Half Day') acc[date].halfDay++;
               return acc;
-            }, {} as Record<string, { present: number; absent: number; halfDay: number; total: number }>)
-          : {
-              '2025-01-15': { present: 8, absent: 2, halfDay: 1, total: 11 },
-              '2025-01-16': { present: 9, absent: 1, halfDay: 1, total: 11 },
-              '2025-01-17': { present: 7, absent: 3, halfDay: 1, total: 11 },
-              '2025-01-18': { present: 10, absent: 0, halfDay: 1, total: 11 },
-              '2025-01-19': { present: 8, absent: 2, halfDay: 1, total: 11 }
-            };
+            }, {} as Record<string, any>)
+          : {};
 
         const csvContent = [
-          ['Date', 'Total Employees', 'Present', 'Absent', 'Half Day', 'Attendance Rate (%)'],
-          ...Object.entries(trendData).map(([date, data]) => [
+          ['Date', 'Present', 'Absent', 'Half Day', 'Total', 'Attendance Rate (%)'],
+          ...Object.entries(trendData).map(([date, data]: [string, any]) => [
             date,
-            data.total.toString(),
             data.present.toString(),
             data.absent.toString(),
             data.halfDay.toString(),
-            ((data.present / data.total) * 100).toFixed(1)
+            data.total.toString(),
+            data.total > 0 ? Math.round((data.present / data.total) * 100).toString() : '0'
           ])
         ].map(row => row.join(',')).join('\n');
 
@@ -931,83 +713,37 @@ export default function AdminAttendancePage() {
       }
     } catch (error) {
       console.error('Error generating report:', error);
-      alert('❌ Error generating report. Please try again.');
+      alert('❌ Failed to generate report');
     }
   };
-
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortDirection("asc");
-    }
-  };
-
-  const getSortIcon = (field: string) => {
-    if (sortField !== field) {
-      return <ArrowUpDown className="h-4 w-4 text-muted-foreground" />;
-    }
-    return sortDirection === "asc" ? 
-      <ArrowUp className="h-4 w-4 text-foreground" /> : 
-      <ArrowDown className="h-4 w-4 text-foreground" />;
-  };
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedData = filteredData.slice(startIndex, endIndex);
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const handleFirstPage = () => setCurrentPage(1);
-  const handleLastPage = () => setCurrentPage(totalPages);
-  const handlePrevPage = () => setCurrentPage(prev => Math.max(1, prev - 1));
-  const handleNextPage = () => setCurrentPage(prev => Math.min(totalPages, prev + 1));
 
   const handleDragEnd = async (result: any) => {
     if (!result.destination) return;
 
-    const { source, destination, draggableId } = result;
-    
-    // If dropped in the same position, do nothing
-    if (source.droppableId === destination.droppableId && source.index === destination.index) {
-      return;
-    }
-
-    // Get the new status from the destination droppable
+    const { draggableId, source, destination } = result;
     const newStatus = destination.droppableId;
-    
-    // Find the record being moved
+
+    if (source.droppableId === destination.droppableId) return;
+
     const record = filteredData.find(r => r.id === draggableId);
     if (!record) return;
 
-    // Update the record's status
     const updatedRecord = { ...record, status: newStatus };
     
-    // Update the local state immediately for better UX
     setFilteredData(prev => 
       prev.map(r => r.id === draggableId ? updatedRecord : r)
     );
-    
     setAttendanceData(prev => 
       prev.map(r => r.id === draggableId ? updatedRecord : r)
     );
 
-    // Update the database
     try {
-      // Check if this is mock data (has employee_name field) or real database data
       if (record.employee_name) {
-        // This is mock data, just show success message
         toast.success(`Moved ${record.employee_name} to ${newStatus}`);
         console.log(`Successfully moved ${record.employee_name} to ${newStatus} (mock data)`);
         return;
       }
 
-      // This is real database data, update the database
       const { error } = await supabase
         .from('Attendance')
         .update({ 
@@ -1018,7 +754,6 @@ export default function AdminAttendancePage() {
 
       if (error) {
         console.error('Error updating attendance status:', error);
-        // Revert the local state if database update fails
         setFilteredData(prev => 
           prev.map(r => r.id === draggableId ? record : r)
         );
@@ -1029,12 +764,10 @@ export default function AdminAttendancePage() {
         return;
       }
 
-      // Show success message
-      toast.success(`Moved ${record.employee_name || record.full_name_from_employee} to ${newStatus}`);
-      console.log(`Successfully moved ${record.employee_name || record.full_name_from_employee} to ${newStatus}`);
+      toast.success(`Moved ${record.employee_name || record.employee_name} to ${newStatus}`);
+      console.log(`Successfully moved ${record.employee_name || record.employee_name} to ${newStatus}`);
     } catch (error) {
       console.error('Error updating attendance status:', error);
-      // Revert the local state if database update fails
       setFilteredData(prev => 
         prev.map(r => r.id === draggableId ? record : r)
       );
@@ -1045,8 +778,19 @@ export default function AdminAttendancePage() {
     }
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedData = filteredData.slice(startIndex, endIndex);
+
+  const handleFirstPage = () => setCurrentPage(1);
+  const handlePrevPage = () => setCurrentPage(prev => Math.max(prev - 1, 1));
+  const handleNextPage = () => setCurrentPage(prev => Math.min(prev + 1, totalPages));
+  const handleLastPage = () => setCurrentPage(totalPages);
+
   if (loading) {
-  return (
+    return (
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
@@ -1056,7 +800,7 @@ export default function AdminAttendancePage() {
               <div className="text-center">
                 <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
                 <p className="text-slate-600">Loading attendance data...</p>
-      </div>
+              </div>
             </div>
           </div>
         </SidebarInset>
@@ -1074,63 +818,7 @@ export default function AdminAttendancePage() {
           <div className="flex-1 flex flex-col">
             <div className="p-1 space-y-1 flex-1 flex flex-col min-h-0">
               {/* KPI Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 mb-2">
-                <Card className="bg-gradient-to-t from-primary/5 to-card dark:bg-card shadow-xs">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-                    <CardDescription className="text-sm font-medium">
-                      Total Employees
-                    </CardDescription>
-                    <Users className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-                    <CardTitle className="text-xl font-bold">
-                      {dashboardStats.totalEmployees}
-                    </CardTitle>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gradient-to-t from-primary/5 to-card dark:bg-card shadow-xs">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-                    <CardDescription className="text-sm font-medium">
-                      Present Today
-                    </CardDescription>
-                    <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <CardTitle className="text-xl font-bold">
-                      {dashboardStats.presentToday}
-                    </CardTitle>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gradient-to-t from-primary/5 to-card dark:bg-card shadow-xs">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-                    <CardDescription className="text-sm font-medium">
-                      Attendance Rate
-                    </CardDescription>
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <CardTitle className="text-xl font-bold">
-                      {dashboardStats.attendanceRate}%
-                    </CardTitle>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gradient-to-t from-primary/5 to-card dark:bg-card shadow-xs">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-                    <CardDescription className="text-sm font-medium">
-                      Avg Working Hours
-                    </CardDescription>
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <CardTitle className="text-xl font-bold">
-                      {dashboardStats.avgWorkingHours}h
-                    </CardTitle>
-                  </CardContent>
-                </Card>
-              </div>
+              <AttendanceKPICards dashboardStats={dashboardStats} />
 
               {/* Main Content Tabs */}
               <Tabs defaultValue="analytics" className="space-y-2">
@@ -1143,1596 +831,135 @@ export default function AdminAttendancePage() {
 
                 {/* Analytics Tab */}
                 <TabsContent value="analytics" className="space-y-0 flex-1 flex flex-col min-h-0">
-                  {/* Action Bar - Outside the card */}
-                  <div className="flex items-center gap-2 flex-wrap -mt-2">
-              <Input
-                            placeholder="Search employees..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="flex-1 min-w-[300px] h-10"
-                          />
+                  {/* Action Bar */}
+                  <AttendanceFilters
+                    searchTerm={searchTerm}
+                    setSearchTerm={setSearchTerm}
+                    statusFilter={statusFilter}
+                    setStatusFilter={setStatusFilter}
+                    jobTitleFilter={jobTitleFilter}
+                    setJobTitleFilter={setJobTitleFilter}
+                    timeFilter={timeFilter}
+                    setTimeFilter={setTimeFilter}
+                    viewType={viewType}
+                    setViewType={setViewType}
+                    visibleColumns={visibleColumns}
+                    setVisibleColumns={setVisibleColumns}
+                    attendanceData={attendanceData}
+                  />
 
-                          <div className="flex gap-2 items-center">
-                            {/* Status Filter */}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="w-40 h-10 justify-between">
-                                  {statusFilter.length === 0 ? "All Status" : 
-                                   statusFilter.length === 1 ? statusFilter[0] : 
-                                   `${statusFilter.length} Status`}
-                                  <ChevronDown className="ml-2 h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" className="w-56">
-                                <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
-                                  Select Status
-            </div>
-                                <div className="space-y-1">
-                                  {["Present", "Absent", "Half Day", "Holiday"].map(status => (
-                                    <div key={status} className="flex items-center space-x-2 px-2 py-1.5">
-                                      <Checkbox
-                                        id={`status-${status}`}
-                                        checked={statusFilter.includes(status)}
-                                        onCheckedChange={(checked) => {
-                                          if (checked) {
-                                            setStatusFilter(prev => [...prev, status]);
-                                          } else {
-                                            setStatusFilter(prev => prev.filter(s => s !== status));
-                                          }
-                                        }}
-                                      />
-                                      <Label htmlFor={`status-${status}`} className="text-sm cursor-pointer">
-                                        {status}
-                                      </Label>
-            </div>
-                                  ))}
-                                </div>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-
-                            {/* Job Title Filter */}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="w-40 h-10 justify-between">
-                                  {jobTitleFilter.length === 0 ? "All Job Titles" : 
-                                   jobTitleFilter.length === 1 ? jobTitleFilter[0] : 
-                                   `${jobTitleFilter.length} Job Titles`}
-                                  <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" className="w-56">
-                                <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
-                                  Select Job Title
-                                </div>
-                                <div className="space-y-1">
-                                  {Array.from(new Set(attendanceData.map(record => record.job_title).filter(Boolean))).map(jobTitle => (
-                                    <div key={jobTitle} className="flex items-center space-x-2 px-2 py-1.5">
-                                      <Checkbox
-                                        id={`job-${jobTitle}`}
-                                        checked={jobTitleFilter.includes(jobTitle)}
-                                        onCheckedChange={(checked) => {
-                                          if (checked) {
-                                            setJobTitleFilter(prev => [...prev, jobTitle]);
-                                          } else {
-                                            setJobTitleFilter(prev => prev.filter(j => j !== jobTitle));
-                                          }
-                                        }}
-                                      />
-                                      <Label htmlFor={`job-${jobTitle}`} className="text-sm cursor-pointer">
-                                        {jobTitle}
-                                      </Label>
-                                    </div>
-                                  ))}
-                                </div>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-
-                            {/* Time Filter */}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="w-40 h-10 justify-between">
-                                  {timeFilter.length === 0 ? "All Time" : 
-                                   timeFilter.length === 1 ? timeFilter[0] : 
-                                   `${timeFilter.length} Time`}
-                                  <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" className="w-56">
-                                <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
-                                  Select Time Period
-            </div>
-                                <div className="space-y-1">
-                                  {["Today", "Yesterday", "Last 7 Days"].map(time => (
-                                    <div key={time} className="flex items-center space-x-2 px-2 py-1.5">
-                                      <Checkbox
-                                        id={`time-${time}`}
-                                        checked={timeFilter.includes(time)}
-                                        onCheckedChange={(checked) => {
-                                          if (checked) {
-                                            setTimeFilter(prev => [...prev, time]);
-                                          } else {
-                                            setTimeFilter(prev => prev.filter(t => t !== time));
-                                          }
-                                        }}
-                                      />
-                                      <Label htmlFor={`time-${time}`} className="text-sm cursor-pointer">
-                                        {time}
-                                      </Label>
-          </div>
-                                  ))}
-                                </div>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-
-
-                            {/* View Toggle */}
-                            <div className="flex border rounded-md">
-                              <Button
-                                variant={viewType === "table" ? "default" : "ghost"}
-                                size="sm"
-                                onClick={() => setViewType("table")}
-                                className="rounded-r-none"
-                                title="Table View"
-                              >
-                                <List className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant={viewType === "kanban" ? "default" : "ghost"}
-                                size="sm"
-                                onClick={() => setViewType("kanban")}
-                                className="rounded-none"
-                                title="Kanban View"
-                              >
-                                <Grid3X3 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant={viewType === "rankings" ? "default" : "ghost"}
-                                size="sm"
-                                onClick={() => setViewType("rankings")}
-                                className="rounded-l-none"
-                                title="Top Attendance Rankings"
-                              >
-                                <TrendingUp className="h-4 w-4" />
-                              </Button>
-                            </div>
-
-                            {/* Customize Columns Dropdown */}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="h-10">
-                                  <Settings className="h-4 w-4 mr-2" />
-                                  Customize Columns
-                                  <ChevronDown className="ml-2 h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-56">
-                                <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
-                                  Show/Hide Columns
-                                </div>
-                                <div className="space-y-1">
-                                  <div className="flex items-center space-x-2 px-2 py-1.5">
-                                    <Checkbox
-                                      id="dropdown-employee"
-                                      checked={visibleColumns.employee}
-                                      onCheckedChange={(checked) => 
-                                        setVisibleColumns(prev => ({ ...prev, employee: !!checked }))
-                                      }
-                                    />
-                                    <Label htmlFor="dropdown-employee" className="text-sm cursor-pointer">Employee</Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2 px-2 py-1.5">
-                                    <Checkbox
-                                      id="dropdown-job_title"
-                                      checked={visibleColumns.job_title}
-                                      onCheckedChange={(checked) => 
-                                        setVisibleColumns(prev => ({ ...prev, job_title: !!checked }))
-                                      }
-                                    />
-                                    <Label htmlFor="dropdown-job_title" className="text-sm cursor-pointer">Job Title</Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2 px-2 py-1.5">
-                                    <Checkbox
-                                      id="dropdown-date"
-                                      checked={visibleColumns.date}
-                                      onCheckedChange={(checked) => 
-                                        setVisibleColumns(prev => ({ ...prev, date: !!checked }))
-                                      }
-                                    />
-                                    <Label htmlFor="dropdown-date" className="text-sm cursor-pointer">Date</Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2 px-2 py-1.5">
-                                    <Checkbox
-                                      id="dropdown-status"
-                                      checked={visibleColumns.status}
-                                      onCheckedChange={(checked) => 
-                                        setVisibleColumns(prev => ({ ...prev, status: !!checked }))
-                                      }
-                                    />
-                                    <Label htmlFor="dropdown-status" className="text-sm cursor-pointer">Status</Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2 px-2 py-1.5">
-                                    <Checkbox
-                                      id="dropdown-timeIn"
-                                      checked={visibleColumns.timeIn}
-                                      onCheckedChange={(checked) => 
-                                        setVisibleColumns(prev => ({ ...prev, timeIn: !!checked }))
-                                      }
-                                    />
-                                    <Label htmlFor="dropdown-timeIn" className="text-sm cursor-pointer">Time In</Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2 px-2 py-1.5">
-                                    <Checkbox
-                                      id="dropdown-timeOut"
-                                      checked={visibleColumns.timeOut}
-                                      onCheckedChange={(checked) => 
-                                        setVisibleColumns(prev => ({ ...prev, timeOut: !!checked }))
-                                      }
-                                    />
-                                    <Label htmlFor="dropdown-timeOut" className="text-sm cursor-pointer">Time Out</Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2 px-2 py-1.5">
-                                    <Checkbox
-                                      id="dropdown-workingHours"
-                                      checked={visibleColumns.workingHours}
-                                      onCheckedChange={(checked) => 
-                                        setVisibleColumns(prev => ({ ...prev, workingHours: !!checked }))
-                                      }
-                                    />
-                                    <Label htmlFor="dropdown-workingHours" className="text-sm cursor-pointer">Working Hours</Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2 px-2 py-1.5">
-                                    <Checkbox
-                                      id="dropdown-markedBy"
-                                      checked={visibleColumns.markedBy}
-                                      onCheckedChange={(checked) => 
-                                        setVisibleColumns(prev => ({ ...prev, markedBy: !!checked }))
-                                      }
-                                    />
-                                    <Label htmlFor="dropdown-markedBy" className="text-sm cursor-pointer">Marked By</Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2 px-2 py-1.5">
-                                    <Checkbox
-                                      id="dropdown-actions"
-                                      checked={visibleColumns.actions}
-                                      onCheckedChange={(checked) => 
-                                        setVisibleColumns(prev => ({ ...prev, actions: !!checked }))
-                                      }
-                                    />
-                                    <Label htmlFor="dropdown-actions" className="text-sm cursor-pointer">Actions</Label>
-                                  </div>
-                                </div>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                  </div>
-
-
-                        {/* Table View */}
-                        {viewType === "table" && (
-                          <div className="flex flex-col h-[60vh]">
-                            <div className="flex-1 overflow-y-auto border rounded-md">
-                              <div className="p-0 -mt-1">
-            <Table className="rounded-none">
-              <TableHeader className="rounded-none sticky top-0 bg-background z-10">
-                <TableRow className="h-3">
-                  {visibleColumns.employee && (
-                    <TableHead className="py-0 px-2">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("employee_name")}
-                        className="h-auto p-0 font-semibold hover:bg-transparent"
-                      >
-                        Employee
-                        {getSortIcon("employee_name")}
-                      </Button>
-                    </TableHead>
+                  {/* Table View */}
+                  {viewType === "table" && (
+                    <AttendanceTableView
+                      paginatedData={paginatedData}
+                      visibleColumns={visibleColumns}
+                      sortField={sortField}
+                      sortDirection={sortDirection}
+                      onSort={handleSort}
+                      onViewRecord={handleViewRecord}
+                      onEditRecord={handleEditRecord}
+                      onFirstPage={handleFirstPage}
+                      onPrevPage={handlePrevPage}
+                      onNextPage={handleNextPage}
+                      onLastPage={handleLastPage}
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      startIndex={startIndex}
+                      endIndex={endIndex}
+                      filteredDataLength={filteredData.length}
+                      itemsPerPage={itemsPerPage}
+                      onItemsPerPageChange={setItemsPerPage}
+                    />
                   )}
-                  {visibleColumns.job_title && (
-                    <TableHead className="py-0 px-2">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("job_title")}
-                        className="h-auto p-0 font-semibold hover:bg-transparent"
-                      >
-                        Job Title
-                        {getSortIcon("job_title")}
-                      </Button>
-                    </TableHead>
+
+                  {/* Kanban View */}
+                  {viewType === "kanban" && (
+                    <AttendanceKanbanView
+                      paginatedData={paginatedData}
+                      onDragEnd={handleDragEnd}
+                      onViewRecord={handleViewRecord}
+                      onEditRecord={handleEditRecord}
+                      onFirstPage={handleFirstPage}
+                      onPrevPage={handlePrevPage}
+                      onNextPage={handleNextPage}
+                      onLastPage={handleLastPage}
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      startIndex={startIndex}
+                      endIndex={endIndex}
+                      filteredDataLength={filteredData.length}
+                      itemsPerPage={itemsPerPage}
+                      onItemsPerPageChange={setItemsPerPage}
+                    />
                   )}
-                  {visibleColumns.date && (
-                    <TableHead className="py-0 px-2">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("date")}
-                        className="h-auto p-0 font-semibold hover:bg-transparent"
-                      >
-                        Date
-                        {getSortIcon("date")}
-                      </Button>
-                    </TableHead>
+
+                  {/* Rankings View */}
+                  {viewType === "rankings" && (
+                    <AttendanceRankingsView
+                      attendanceData={attendanceData}
+                      employees={employees}
+                      jobTitleFilter={jobTitleFilter}
+                      setJobTitleFilter={setJobTitleFilter}
+                    />
                   )}
-                  {visibleColumns.status && (
-                    <TableHead className="py-0 px-2">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("status")}
-                        className="h-auto p-0 font-semibold hover:bg-transparent"
-                      >
-                        Status
-                        {getSortIcon("status")}
-                      </Button>
-                    </TableHead>
-                  )}
-                  {visibleColumns.timeIn && (
-                    <TableHead className="py-0 px-2">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("time_in")}
-                        className="h-auto p-0 font-semibold hover:bg-transparent"
-                      >
-                        Time In
-                        {getSortIcon("time_in")}
-                      </Button>
-                    </TableHead>
-                  )}
-                  {visibleColumns.timeOut && (
-                    <TableHead className="py-0 px-2">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("time_out")}
-                        className="h-auto p-0 font-semibold hover:bg-transparent"
-                      >
-                        Time Out
-                        {getSortIcon("time_out")}
-                      </Button>
-                    </TableHead>
-                  )}
-                  {visibleColumns.workingHours && (
-                    <TableHead className="py-0 px-2">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("working_hours")}
-                        className="h-auto p-0 font-semibold hover:bg-transparent"
-                      >
-                        Working Hours
-                        {getSortIcon("working_hours")}
-                      </Button>
-                    </TableHead>
-                  )}
-                  {visibleColumns.markedBy && (
-                    <TableHead className="py-0 px-2">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("marked_by")}
-                        className="h-auto p-0 font-semibold hover:bg-transparent"
-                      >
-                        Marked By
-                        {getSortIcon("marked_by")}
-                      </Button>
-                    </TableHead>
-                  )}
-                  {visibleColumns.actions && <TableHead className="py-1 px-2">Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                              {console.log("Filtered data length:", filteredData.length, "Filtered data:", filteredData)}
-                {paginatedData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={Object.values(visibleColumns).filter(Boolean).length} className="text-center py-8">
-                      <div className="text-center">
-                        <Users className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                        <h3 className="text-lg font-semibold text-slate-700">No Records Found</h3>
-                        <p className="text-slate-500">Try adjusting your filters or check back later.</p>
-              </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedData.map((record) => (
-                    <TableRow key={record.id} className="h-3">
-                      {visibleColumns.employee && (
-                        <TableCell className="py-0 px-2">
-              <div>
-                            <div className="font-medium text-base">{record.employee_name}</div>
-                            <div className="text-base text-slate-500">{record.employee_id}</div>
-              </div>
-                        </TableCell>
-                      )}
-                      {visibleColumns.job_title && <TableCell className="text-base">{record.job_title}</TableCell>}
-                      {visibleColumns.date && <TableCell className="text-base">{record.date}</TableCell>}
-                      {visibleColumns.status && <TableCell>{getStatusBadge(record.status)}</TableCell>}
-                      {visibleColumns.timeIn && <TableCell className="text-base">{record.time_in}</TableCell>}
-                      {visibleColumns.timeOut && <TableCell className="text-base">{record.time_out}</TableCell>}
-                      {visibleColumns.workingHours && <TableCell className="text-base">{record.working_hours}h</TableCell>}
-                      {visibleColumns.markedBy && <TableCell className="text-base">{record.marked_by}</TableCell>}
-                      {visibleColumns.actions && (
-                        <TableCell className="py-0 px-2">
-            <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
-                              variant="ghost"
-                              className="border-0"
-                              onClick={() => handleViewRecord(record)}
-                            >
-                              <Eye className="h-4 w-4" />
-              </Button>
-                            <Button 
-                              size="sm" 
-                              variant="ghost"
-                              className="border-0"
-                              onClick={() => handleEditRecord(record)}
-                            >
-                              <Edit className="h-4 w-4" />
-              </Button>
-            </div>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))
-                )}
-                            </TableBody>
-                          </Table>
-          </div>
-                            </div>
-
-                            {/* Pagination - Outside Table */}
-                            {filteredData.length > 0 && (
-                              <div className="flex items-center justify-between px-4 py-2 border-t bg-background -mb-2">
-                                <div className="flex items-center gap-4">
-                                  <div className="text-sm text-muted-foreground">
-                                    Showing {startIndex + 1} to {Math.min(endIndex, filteredData.length)} of {filteredData.length} records
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">Rows per page:</span>
-                                    <select 
-                                      value={itemsPerPage} 
-                                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                                      className="px-2 py-1 border rounded text-sm"
-                                    >
-                                      <option value={5}>5</option>
-                                      <option value={10}>10</option>
-                                      <option value={25}>25</option>
-                                      <option value={50}>50</option>
-                                      <option value={100}>100</option>
-                                    </select>
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handleFirstPage}
-                                    disabled={currentPage === 1}
-                                    className="rounded-none"
-                                  >
-                                    First
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handlePrevPage}
-                                    disabled={currentPage === 1}
-                                    className="rounded-none"
-                                  >
-                                    Previous
-                                  </Button>
-                                  <span className="text-sm">
-                                    Page {currentPage} of {totalPages}
-                                  </span>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handleNextPage}
-                                    disabled={currentPage === totalPages}
-                                    className="rounded-none"
-                                  >
-                                    Next
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handleLastPage}
-                                    disabled={currentPage === totalPages}
-                                    className="rounded-none"
-                                  >
-                                    Last
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Kanban View */}
-                        {viewType === "kanban" && (
-                          <div className="flex flex-col h-[60vh]">
-                            <div className="flex-1 overflow-y-auto border rounded-md">
-                              <div className="p-0">
-                            <DragDropContext onDragEnd={handleDragEnd}>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                {["Present", "Absent", "Half Day", "Holiday"].map(status => {
-                                  const statusRecords = paginatedData.filter(record => record.status === status);
-                                return (
-                                  <div key={status} className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                      <h3 className="font-semibold text-sm">{status}</h3>
-                                      <Badge variant="secondary" className="text-xs">
-                                        {statusRecords.length}
-                                      </Badge>
-              </div>
-                                    <Droppable droppableId={status}>
-                                      {(provided, snapshot) => (
-                                        <div
-                                          ref={provided.innerRef}
-                                          {...provided.droppableProps}
-                                          className={`space-y-2 min-h-[200px] p-2 rounded-lg transition-colors ${
-                                            snapshot.isDraggingOver ? 'bg-muted/50' : ''
-                                          }`}
-                                        >
-                                          {statusRecords.map((record, index) => (
-                                            <Draggable key={record.id} draggableId={record.id} index={index}>
-                                              {(provided, snapshot) => (
-                                                <div
-                                                  ref={provided.innerRef}
-                                                  {...provided.draggableProps}
-                                                  {...provided.dragHandleProps}
-                                                  className={`transition-transform ${
-                                                    snapshot.isDragging ? 'rotate-2 scale-105' : ''
-                                                  }`}
-                                                >
-                                                  <Card className="p-3 cursor-move hover:shadow-md transition-shadow rounded-none">
-                                                    <div className="space-y-2">
-                                                      <div className="flex items-center justify-between">
-              <div>
-                                                          <p className="font-medium text-sm">{record.employee_name}</p>
-                                                          <p className="text-xs text-muted-foreground">{record.employee_id}</p>
-              </div>
-                                                        {getStatusBadge(record.status)}
-            </div>
-                                                      <div className="text-xs text-muted-foreground">
-                                                        <p>Job Title: {record.job_title}</p>
-                                                        <p>Date: {record.date}</p>
-                                                        {record.time_in && <p>Time In: {record.time_in}</p>}
-                                                        {record.time_out && <p>Time Out: {record.time_out}</p>}
-                                                        {record.working_hours && <p>Hours: {record.working_hours}h</p>}
-                                                      </div>
-                                                      <div className="flex gap-1 pt-2">
-                                                        <Button 
-                                                          size="sm" 
-                                                          variant="outline"
-                                                          className="rounded-none h-7 px-2"
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleViewRecord(record);
-                                                          }}
-                                                        >
-                                                          <Eye className="h-3 w-3" />
-                                                        </Button>
-                                                        <Button 
-                                                          size="sm" 
-                                                          variant="outline"
-                                                          className="rounded-none h-7 px-2"
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleEditRecord(record);
-                                                          }}
-                                                        >
-                                                          <Edit className="h-3 w-3" />
-                                                        </Button>
-                                                      </div>
-                                                    </div>
-        </Card>
-                                                </div>
-                                              )}
-                                            </Draggable>
-                                          ))}
-                                          {provided.placeholder}
-                                        </div>
-                                      )}
-                                    </Droppable>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            </DragDropContext>
-                              </div>
-                            </div>
-                          
-                            {/* Kanban Pagination - Outside Kanban */}
-                            {filteredData.length > 0 && (
-                              <div className="flex items-center justify-between px-4 py-2 border-t bg-background -mb-2">
-                              <div className="flex items-center gap-4">
-                                <div className="text-sm text-muted-foreground">
-                                  Showing {startIndex + 1} to {Math.min(endIndex, filteredData.length)} of {filteredData.length} records
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-muted-foreground">Rows per page:</span>
-                                  <select 
-                                    value={itemsPerPage} 
-                                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                                    className="px-2 py-1 border rounded text-sm"
-                                  >
-                                    <option value={5}>5</option>
-                                    <option value={10}>10</option>
-                                    <option value={25}>25</option>
-                                    <option value={50}>50</option>
-                                    <option value={100}>100</option>
-                                  </select>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={handleFirstPage}
-                                  disabled={currentPage === 1}
-                                  className="rounded-none"
-                                >
-                                  First
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={handlePrevPage}
-                                  disabled={currentPage === 1}
-                                  className="rounded-none"
-                                >
-                                  Previous
-                                </Button>
-                                <span className="text-sm">
-                                  Page {currentPage} of {totalPages}
-                                </span>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={handleNextPage}
-                                  disabled={currentPage === totalPages}
-                                  className="rounded-none"
-                                >
-                                  Next
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={handleLastPage}
-                                  disabled={currentPage === totalPages}
-                                  className="rounded-none"
-                                >
-                                  Last
-                                </Button>
-              </div>
-                            </div>
-                          )}
-                          </div>
-                        )}
-
-                        {/* Rankings View */}
-                        {viewType === "rankings" && (
-                          <div className="space-y-6">
-                            {/* Header with Job Title Filter */}
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <h3 className="text-2xl font-bold text-foreground mb-2">Attendance Rankings</h3>
-                                <p className="text-muted-foreground">All employees ranked by attendance performance</p>
-                              </div>
-                              
-                              {/* Job Title Filter */}
-                              <div className="flex items-center gap-4">
-                                <Label htmlFor="rankings-job-filter" className="text-sm font-medium">Filter by Job Title:</Label>
-                                <Select value={jobTitleFilter.length > 0 ? jobTitleFilter[0] : "all"} onValueChange={(value) => {
-                                  if (value === "all") {
-                                    setJobTitleFilter([]);
-                                  } else {
-                                    setJobTitleFilter([value]);
-                                  }
-                                }}>
-                                  <SelectTrigger id="rankings-job-filter" className="w-48">
-                                    <SelectValue placeholder="All Job Titles" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="all">All Job Titles</SelectItem>
-                                    {Array.from(new Set(attendanceData.map(record => record.job_title).filter(Boolean))).map(jobTitle => (
-                                      <SelectItem key={jobTitle} value={jobTitle}>{jobTitle}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            
-                            {/* Rankings Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                              {(() => {
-                                // Start with ALL employees from Employee Directory
-                                const allEmployeesFromDB = employees.map(emp => ({
-                                  name: emp.full_name,
-                                  job_title: emp.job_title || 'No Job Title',
-                                  profile_photo: emp.profile_photo,
-                                  totalDays: 0,
-                                  presentDays: 0,
-                                  absentDays: 0,
-                                  halfDays: 0,
-                                  totalHours: 0
-                                }));
-
-                                console.log("All employees from DB:", allEmployeesFromDB.length);
-
-                                // Calculate attendance stats for employees who have attendance records
-                                const attendanceStats = attendanceData.reduce((acc, record) => {
-                                  if (!acc[record.employee_name]) {
-                                    acc[record.employee_name] = {
-                                      name: record.employee_name,
-                                      job_title: record.job_title,
-                                      profile_photo: record.profile_photo,
-                                      totalDays: 0,
-                                      presentDays: 0,
-                                      absentDays: 0,
-                                      halfDays: 0,
-                                      totalHours: 0
-                                    };
-                                    // Debug: Log profile photo info
-                                    console.log(`Employee: ${record.employee_name}, Profile Photo: ${record.profile_photo}, Type: ${typeof record.profile_photo}`);
-                                  }
-                                  acc[record.employee_name].totalDays++;
-                                  if (record.status === 'Present') {
-                                    acc[record.employee_name].presentDays++;
-                                    acc[record.employee_name].totalHours += record.working_hours || 0;
-                                  } else if (record.status === 'Absent') {
-                                    acc[record.employee_name].absentDays++;
-                                  } else if (record.status === 'Half Day') {
-                                    acc[record.employee_name].halfDays++;
-                                    acc[record.employee_name].totalHours += record.working_hours || 0;
-                                  }
-                                  return acc;
-                                }, {} as Record<string, any>);
-
-                                // Merge attendance stats with all employees
-                                let allEmployees = allEmployeesFromDB.map(emp => {
-                                  const attendanceData = attendanceStats[emp.name];
-                                  if (attendanceData) {
-                                    // Employee has attendance records
-                                    return {
-                                      ...emp,
-                                      ...attendanceData,
-                                      attendanceRate: Math.round((attendanceData.presentDays / attendanceData.totalDays) * 100),
-                                      avgHours: (attendanceData.presentDays + attendanceData.halfDays) > 0 ? Math.round((attendanceData.totalHours / (attendanceData.presentDays + attendanceData.halfDays)) * 10) / 10 : 0
-                                    };
-                                  } else {
-                                    // Employee has no attendance records
-                                    return {
-                                      ...emp,
-                                      attendanceRate: 0,
-                                      avgHours: 0
-                                    };
-                                  }
-                                }).sort((a, b) => b.attendanceRate - a.attendanceRate);
-
-                                console.log("Final all employees count:", allEmployees.length);
-
-                                // Filter by job title if selected
-                                if (jobTitleFilter.length > 0) {
-                                  allEmployees = allEmployees.filter(emp => jobTitleFilter.includes(emp.job_title));
-                                }
-
-                                return allEmployees.map((employee, index) => {
-                                  const getRankIcon = (rank: number) => {
-                                    if (rank < 3) {
-                                      const colors = [
-                                        'from-yellow-400 to-yellow-600',
-                                        'from-gray-400 to-gray-600', 
-                                        'from-orange-400 to-orange-600'
-                                      ];
-                                      return (
-                                        <div className={`w-8 h-8 bg-gradient-to-br ${colors[rank]} text-white rounded-full flex items-center justify-center font-bold text-sm shadow-lg`}>
-                                          {rank + 1}
-                                        </div>
-                                      );
-                                    }
-                                    return (
-                                      <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/80 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-lg">
-                                        {rank + 1}
-                                      </div>
-                                    );
-                                  };
-
-                                  const getProgressColor = (rate: number) => {
-                                    if (rate >= 95) return 'from-green-500 to-green-600';
-                                    if (rate >= 85) return 'from-yellow-500 to-yellow-600';
-                                    if (rate >= 70) return 'from-orange-500 to-orange-600';
-                                    return 'from-red-500 to-red-600';
-                                  };
-
-                                  return (
-                                    <Card key={employee.name} className="bg-card border-border shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02]">
-                                      <CardContent className="p-6">
-                                        {/* Header with Photo and Rank */}
-                                        <div className="flex items-center gap-4 mb-4">
-                                          <div className="relative">
-                                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 border-2 border-border shadow-lg overflow-hidden">
-                                              {employee.profile_photo ? (
-                                                <img 
-                                                  src={(() => {
-                                                    const photo = employee.profile_photo;
-                                                    console.log(`Processing photo for ${employee.name}:`, photo);
-                                                    
-                                                    if (photo.startsWith('http')) {
-                                                      return photo;
-                                                    } else if (photo.startsWith('data:')) {
-                                                      return photo;
-                                                    } else if (photo.startsWith('/')) {
-                                                      return `https://grjaqvdoxqendrzzgyjk.supabase.co${photo}`;
-                                                    } else {
-                                                      return `https://grjaqvdoxqendrzzgyjk.supabase.co/storage/v1/object/public/avatars/${photo}`;
-                                                    }
-                                                  })()} 
-                                                  alt={employee.name}
-                                                  className="w-full h-full object-cover"
-                                                  onLoad={() => console.log(`Image loaded successfully for ${employee.name}`)}
-                                                  onError={(e) => {
-                                                    console.log('Image failed to load for', employee.name, ':', employee.profile_photo);
-                                                    e.currentTarget.style.display = 'none';
-                                                    e.currentTarget.nextElementSibling.style.display = 'flex';
-                                                  }}
-                                                />
-                                              ) : null}
-                                              <div 
-                                                className={`w-full h-full flex items-center justify-center text-white font-bold text-lg ${employee.profile_photo ? 'hidden' : 'flex'}`}
-                                                style={{ 
-                                                  backgroundColor: `hsl(${(employee.name.charCodeAt(0) * 137.5) % 360}, 70%, 50%)`,
-                                                  backgroundImage: `linear-gradient(135deg, hsl(${(employee.name.charCodeAt(0) * 137.5) % 360}, 70%, 50%), hsl(${((employee.name.charCodeAt(0) * 137.5) + 30) % 360}, 70%, 60%)`
-                                                }}
-                                              >
-                                                {employee.name.charAt(0).toUpperCase()}
-                                              </div>
-                                            </div>
-                                            <div className="absolute -top-1 -right-1">
-                                              {getRankIcon(index)}
-                                            </div>
-                                          </div>
-                                          
-                                          <div className="flex-1">
-                                            <h4 className="font-bold text-lg text-foreground mb-1">{employee.name}</h4>
-                                            <Badge className="bg-muted text-muted-foreground font-medium px-2 py-1 text-xs">
-                                              {employee.job_title}
-                                            </Badge>
-                                          </div>
-                                        </div>
-                                        
-                                        {/* Attendance Rate */}
-                                        <div className="text-center mb-4">
-                                          <div className="text-3xl font-bold text-foreground mb-1">{employee.attendanceRate}%</div>
-                                          <div className="text-sm text-muted-foreground">Attendance Rate</div>
-                                        </div>
-                                        
-                                        {/* Progress Bar */}
-                                        <div className="mb-4">
-                                          <div className="w-full bg-muted/50 rounded-full h-2">
-                                            <div 
-                                              className={`bg-gradient-to-r ${getProgressColor(employee.attendanceRate)} h-2 rounded-full transition-all duration-700`}
-                                              style={{ width: `${employee.attendanceRate}%` }}
-                                            ></div>
-                                          </div>
-                                        </div>
-                                        
-                                        {/* Stats */}
-                                        <div className="space-y-2">
-                                          <div className="flex items-center justify-between text-sm text-muted-foreground">
-                                            <div className="flex items-center gap-1">
-                                              <CheckCircle className="h-4 w-4 text-green-500" />
-                                              <span>{employee.presentDays} present</span>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                              <Clock className="h-4 w-4 text-blue-500" />
-                                              <span>{employee.avgHours}h avg</span>
-                                            </div>
-                                          </div>
-                                          
-                                          {(employee.absentDays > 0 || employee.halfDays > 0) && (
-                                            <div className="flex items-center justify-between text-sm text-muted-foreground">
-                                              {employee.absentDays > 0 && (
-                                                <div className="flex items-center gap-1">
-                                                  <AlertTriangle className="h-4 w-4 text-red-500" />
-                                                  <span>{employee.absentDays} absent</span>
-                                                </div>
-                                              )}
-                                              {employee.halfDays > 0 && (
-                                                <div className="flex items-center gap-1">
-                                                  <Clock className="h-4 w-4 text-orange-500" />
-                                                  <span>{employee.halfDays} half day</span>
-                                                </div>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </CardContent>
-                                    </Card>
-                                  );
-                                });
-                              })()}
-                              
-                              {attendanceData.length === 0 && (
-                                <div className="col-span-full text-center py-12">
-                                  <div className="text-muted-foreground text-lg">No attendance data available</div>
-                                  <p className="text-sm text-muted-foreground mt-2">Attendance rankings will appear here once data is available</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
                 </TabsContent>
 
-                {/* Job Titles Tab */}
+                {/* Departments Tab */}
                 <TabsContent value="departments" className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {departmentStats.map((dept, index) => {
-                      const getJobTitleIcon = (jobTitle: string) => {
-                        if (!jobTitle) return <Building2 className="h-4 w-4 text-gray-600" />;
-                        switch (jobTitle.toLowerCase()) {
-                          case 'sales': return <Target className="h-4 w-4 text-blue-600" />;
-                          case 'marketing': return <TrendingUp className="h-4 w-4 text-purple-600" />;
-                          case 'hr': return <Users className="h-4 w-4 text-green-600" />;
-                          case 'it': return <Zap className="h-4 w-4 text-orange-600" />;
-                          case 'finance': return <DollarSign className="h-4 w-4 text-emerald-600" />;
-                          case 'software engineer': return <Zap className="h-4 w-4 text-blue-600" />;
-                          case 'manager': return <Users className="h-4 w-4 text-purple-600" />;
-                          case 'developer': return <Zap className="h-4 w-4 text-green-600" />;
-                          case 'analyst': return <TrendingUp className="h-4 w-4 text-orange-600" />;
-                          default: return <Building2 className="h-4 w-4 text-gray-600" />;
-                        }
-                      };
-
-                      const getAttendanceColor = (rate: number) => {
-                        if (rate >= 95) return 'text-green-600 bg-green-50 border-green-200';
-                        if (rate >= 85) return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-                        return 'text-red-600 bg-red-50 border-red-200';
-                      };
-
-                      const getProgressColor = (rate: number) => {
-                        if (rate >= 95) return 'bg-gradient-to-r from-green-500 to-green-600';
-                        if (rate >= 85) return 'bg-gradient-to-r from-yellow-500 to-yellow-600';
-                        return 'bg-gradient-to-r from-red-500 to-red-600';
-                      };
-
-                      return (
-                        <Card key={dept.department} className="bg-gradient-to-t from-primary/5 to-card shadow-xs hover:shadow-md transition-all duration-200">
-                          <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <div className="p-1.5 rounded-md bg-primary/10">
-                                  {getJobTitleIcon(dept.department)}
-                                </div>
-                                <div>
-                                  <CardTitle className="text-base font-semibold">{dept.department}</CardTitle>
-                                  <CardDescription className="text-xs">
-                                    {dept.present_today}/{dept.total_employees} present
-                                  </CardDescription>
-                                </div>
-                              </div>
-                              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold border ${getAttendanceColor(dept.attendance_rate)}`}>
-                                {dept.attendance_rate}%
-                              </div>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="space-y-3">
-                              <div className="space-y-1">
-                                <div className="flex justify-between text-xs text-muted-foreground">
-                                  <span>Attendance Rate</span>
-                                  <span>{dept.attendance_rate}%</span>
-                                </div>
-                                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                                  <div 
-                                    className={`h-full rounded-full transition-all duration-500 ${getProgressColor(dept.attendance_rate)}`}
-                                    style={{ width: `${dept.attendance_rate}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                <div className="flex items-center gap-1">
-                                  <CheckCircle className="h-3 w-3 text-green-600" />
-                                  <span>{dept.present_today} Present</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3 text-blue-600" />
-                                  <span>{dept.avg_working_hours}h</span>
-                                </div>
-                              </div>
-
-                              <div className="flex justify-center">
-                                {dept.attendance_rate >= 95 && <Badge className="bg-green-100 text-green-800 text-xs">Excellent</Badge>}
-                                {dept.attendance_rate >= 85 && dept.attendance_rate < 95 && <Badge className="bg-yellow-100 text-yellow-800 text-xs">Good</Badge>}
-                                {dept.attendance_rate < 85 && <Badge className="bg-red-100 text-red-800 text-xs">Needs Attention</Badge>}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
+                  <DepartmentStatsView departmentStats={departmentStats} />
                 </TabsContent>
-
 
                 {/* Reports Tab */}
                 <TabsContent value="reports" className="space-y-4">
-      <Card>
-        <CardHeader>
-                      <CardTitle>Custom Reports</CardTitle>
-                      <CardDescription>Generate and export attendance reports</CardDescription>
-        </CardHeader>
-        <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <Card 
-                          className="p-4 hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => handleGenerateReport('monthly')}
-                        >
-                          <div className="flex items-center gap-3">
-                            <BarChart3 className="h-8 w-8 text-blue-600" />
-                            <div>
-                              <h3 className="font-semibold">Monthly Summary</h3>
-                              <p className="text-sm text-slate-600">Department-wise attendance</p>
-                      </div>
-                          </div>
-                        </Card>
-
-                        <Card 
-                          className="p-4 hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => handleGenerateReport('trends')}
-                        >
-                        <div className="flex items-center gap-3">
-                            <PieChart className="h-8 w-8 text-green-600" />
-                          <div>
-                              <h3 className="font-semibold">Trend Analysis</h3>
-                              <p className="text-sm text-slate-600">Attendance patterns</p>
-                            </div>
-                            </div>
-                        </Card>
-
-                        <Card 
-                          className="p-4 hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={handleExportData}
-                        >
-                        <div className="flex items-center gap-3">
-                            <Download className="h-8 w-8 text-purple-600" />
-                            <div>
-                              <h3 className="font-semibold">Export Data</h3>
-                              <p className="text-sm text-slate-600">CSV/Excel export</p>
-                          </div>
-                        </div>
-                        </Card>
-          </div>
-        </CardContent>
-      </Card>
+                  <ReportsView 
+                    onGenerateReport={handleGenerateReport}
+                    onExportData={handleExportData}
+                  />
                 </TabsContent>
 
                 {/* Settings Tab */}
                 <TabsContent value="settings" className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Attendance Settings</CardTitle>
-                      <CardDescription>Configure attendance policies and rules</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <Label htmlFor="auto-approval">Auto-approve attendance</Label>
-                            <p className="text-sm text-slate-600">Automatically approve attendance within policy</p>
-    </div>
-                          <Switch 
-                            id="auto-approval" 
-                            checked={settings.autoApproval}
-                            onCheckedChange={(checked) => 
-                              setSettings(prev => ({ ...prev, autoApproval: checked }))
-                            }
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <Label htmlFor="late-marking-alerts">Late marking alerts</Label>
-                            <p className="text-sm text-slate-600">Get notified when attendance is marked late</p>
-                          </div>
-                          <Switch 
-                            id="late-marking-alerts" 
-                            checked={settings.lateMarkingAlerts}
-                            onCheckedChange={(checked) => 
-                              setSettings(prev => ({ ...prev, lateMarkingAlerts: checked }))
-                            }
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <Label htmlFor="exception-notifications">Exception notifications</Label>
-                            <p className="text-sm text-slate-600">Receive alerts for attendance exceptions</p>
-                          </div>
-                          <Switch 
-                            id="exception-notifications" 
-                            checked={settings.exceptionNotifications}
-                            onCheckedChange={(checked) => 
-                              setSettings(prev => ({ ...prev, exceptionNotifications: checked }))
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      <div className="pt-4 border-t">
-                        <h3 className="font-semibold mb-4">Holiday Calendar</h3>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between p-3 border rounded-lg">
-                            <div>
-                              <p className="font-medium">New Year's Day</p>
-                              <p className="text-sm text-slate-600">January 1, 2024</p>
-                            </div>
-                            <Button size="sm" variant="outline">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <div className="flex items-center justify-between p-3 border rounded-lg">
-                            <div>
-                              <p className="font-medium">Independence Day</p>
-                              <p className="text-sm text-slate-600">July 4, 2024</p>
-                            </div>
-                            <Button size="sm" variant="outline">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                        <Button className="mt-4" variant="outline">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Holiday
-                        </Button>
-          </div>
-        </CardContent>
-      </Card>
+                  <SettingsView 
+                    settings={settings}
+                    setSettings={setSettings}
+                  />
                 </TabsContent>
               </Tabs>
             </div>
           </div>
-    </div>
+        </div>
 
-      {/* Employee Details Dialog */}
-      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto bg-background">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-foreground">
-              <User className="h-5 w-5" />
-              Employee Attendance Details
-            </DialogTitle>
-            <DialogDescription>
-              Detailed attendance information for {selectedRecord?.employee_name}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedRecord && (
-            <div className="space-y-6">
-              {/* Quick Overview Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Employee Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Name:</span>
-                      <span className="font-medium">{selectedRecord.employee_name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Employee ID:</span>
-                      <span className="font-medium">{selectedRecord.employee_id}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Department:</span>
-                      <span className="font-medium">{selectedRecord.department}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Date:</span>
-                      <span className="font-medium">{selectedRecord.date}</span>
-                    </div>
-                  </CardContent>
-                </Card>
+        {/* Modals */}
+        <EmployeeDetailsModal
+          isOpen={isDetailsOpen}
+          onClose={() => setIsDetailsOpen(false)}
+          selectedRecord={selectedRecord}
+          monthlyStats={monthlyStats}
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
+          onMonthChange={setSelectedMonth}
+          onYearChange={setSelectedYear}
+        />
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Attendance Details</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Status:</span>
-                      {getStatusBadge(selectedRecord.status)}
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Time In:</span>
-                      <span className="font-medium">{selectedRecord.time_in}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Time Out:</span>
-                      <span className="font-medium">{selectedRecord.time_out}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Working Hours:</span>
-                      <span className="font-medium">{selectedRecord.working_hours}h</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Marked By:</span>
-                      <span className="font-medium">{selectedRecord.marked_by}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+        <ManualAttendanceModal
+          isOpen={isManualAttendanceOpen}
+          onClose={() => setIsManualAttendanceOpen(false)}
+          employees={employees}
+          selectedEmployee={selectedEmployeeForManual}
+          onEmployeeSelect={setSelectedEmployeeForManual}
+          form={manualAttendanceForm}
+          onFormChange={setManualAttendanceForm}
+          onSubmit={handleManualAttendance}
+        />
 
-              {/* Monthly Statistics Section */}
-              <Card className="bg-gradient-to-t from-primary/5 to-card shadow-xs">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-semibold">Monthly Statistics</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                        <SelectTrigger className="w-32 h-8">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="january">January</SelectItem>
-                          <SelectItem value="february">February</SelectItem>
-                          <SelectItem value="march">March</SelectItem>
-                          <SelectItem value="april">April</SelectItem>
-                          <SelectItem value="may">May</SelectItem>
-                          <SelectItem value="june">June</SelectItem>
-                          <SelectItem value="july">July</SelectItem>
-                          <SelectItem value="august">August</SelectItem>
-                          <SelectItem value="september">September</SelectItem>
-                          <SelectItem value="october">October</SelectItem>
-                          <SelectItem value="november">November</SelectItem>
-                          <SelectItem value="december">December</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select value={selectedYear} onValueChange={setSelectedYear}>
-                        <SelectTrigger className="w-20 h-8">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="2023">2023</SelectItem>
-                          <SelectItem value="2024">2024</SelectItem>
-                          <SelectItem value="2025">2025</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-2 lg:grid-cols-4 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs">
-                    <Card className="@container/card">
-                      <CardHeader className="pb-2">
-                        <CardDescription className="flex items-center justify-between">
-                          <span className="text-green-600 dark:text-green-400">Present</span>
-                          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        </CardDescription>
-                        <CardTitle className="text-2xl font-semibold tabular-nums text-green-700 dark:text-green-300">
-                          {monthlyStats.present}
-                        </CardTitle>
-                      </CardHeader>
-                    </Card>
-                    
-                    <Card className="@container/card">
-                      <CardHeader className="pb-2">
-                        <CardDescription className="flex items-center justify-between">
-                          <span className="text-red-600 dark:text-red-400">Absent</span>
-                          <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                        </CardDescription>
-                        <CardTitle className="text-2xl font-semibold tabular-nums text-red-700 dark:text-red-300">
-                          {monthlyStats.absent}
-                        </CardTitle>
-                      </CardHeader>
-                    </Card>
-                    
-                    <Card className="@container/card">
-                      <CardHeader className="pb-2">
-                        <CardDescription className="flex items-center justify-between">
-                          <span className="text-orange-600 dark:text-orange-400">Half Day</span>
-                          <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                        </CardDescription>
-                        <CardTitle className="text-2xl font-semibold tabular-nums text-orange-700 dark:text-orange-300">
-                          {monthlyStats.halfDay}
-                        </CardTitle>
-                      </CardHeader>
-                    </Card>
-                    
-                    <Card className="@container/card">
-                      <CardHeader className="pb-2">
-                        <CardDescription className="flex items-center justify-between">
-                          <span className="text-blue-600 dark:text-blue-400">Attendance Rate</span>
-                          <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        </CardDescription>
-                        <CardTitle className="text-2xl font-semibold tabular-nums text-blue-700 dark:text-blue-300">
-                          {monthlyStats.attendanceRate}%
-                        </CardTitle>
-                      </CardHeader>
-                    </Card>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Attendance Calendar Section */}
-              <Card className="bg-gradient-to-t from-primary/5 to-card shadow-xs">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Attendance Calendar</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="bg-gradient-to-br from-muted/50 to-background border rounded-lg p-4">
-                    <div className="grid grid-cols-7 gap-1 mb-2">
-                      <div className="text-center text-sm text-muted-foreground py-2 font-medium">Sun</div>
-                      <div className="text-center text-sm text-muted-foreground py-2 font-medium">Mon</div>
-                      <div className="text-center text-sm text-muted-foreground py-2 font-medium">Tue</div>
-                      <div className="text-center text-sm text-muted-foreground py-2 font-medium">Wed</div>
-                      <div className="text-center text-sm text-muted-foreground py-2 font-medium">Thu</div>
-                      <div className="text-center text-sm text-muted-foreground py-2 font-medium">Fri</div>
-                      <div className="text-center text-sm text-muted-foreground py-2 font-medium">Sat</div>
-                    </div>
-                    <div className="grid grid-cols-7 gap-1">
-                      {/* Empty cells for days before month starts */}
-                      <div className="aspect-square"></div>
-                      <div className="aspect-square"></div>
-                      <div className="aspect-square"></div>
-                      
-                      {/* Calendar days */}
-                      {Array.from({ length: 25 }, (_, i) => i + 1).map((day) => (
-                        <div 
-                          key={day} 
-                          className={`aspect-square rounded-md flex flex-col items-center justify-center text-sm relative transition-colors ${
-                            day === 24 
-                              ? 'bg-primary text-primary-foreground border-2 border-primary/20 shadow-sm' 
-                              : 'bg-muted/30 hover:bg-muted/50 text-foreground'
-                          }`}
-                        >
-                          <span className="font-medium">{day}</span>
-                          {day === 24 && (
-                            <div className="w-2 h-2 bg-orange-400 rounded-full mt-1"></div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Calendar Legend */}
-                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-4 h-4 bg-green-500 rounded-full"></div>
-                      <span className="text-sm text-muted-foreground">Present</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-4 h-4 bg-red-500 rounded-full"></div>
-                      <span className="text-sm text-muted-foreground">Absent</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-4 h-4 bg-yellow-500 rounded-full"></div>
-                      <span className="text-sm text-muted-foreground">Half Day</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
-                      <span className="text-sm text-muted-foreground">Holiday</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Additional Information */}
-              <Card className="bg-gradient-to-t from-primary/5 to-card shadow-xs">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Additional Information</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <h4 className="font-semibold text-foreground">Attendance Summary</h4>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        This record shows the attendance status for {selectedRecord.employee_name} on {selectedRecord.date}.
-                        {selectedRecord.status === 'Present' && ' The employee was present for the full working day.'}
-                        {selectedRecord.status === 'Absent' && ' The employee was absent on this day.'}
-                        {selectedRecord.status === 'Half Day' && ' The employee worked for half day only.'}
-                        {selectedRecord.status === 'Holiday' && ' This was a holiday for the employee.'}
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <h4 className="font-semibold text-foreground">Working Hours Analysis</h4>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Total working hours: {selectedRecord.working_hours}h
-                        {selectedRecord.working_hours && parseFloat(selectedRecord.working_hours) >= 8 && ' (Full day)'}
-                        {selectedRecord.working_hours && parseFloat(selectedRecord.working_hours) < 8 && parseFloat(selectedRecord.working_hours) > 0 && ' (Partial day)'}
-                        {selectedRecord.working_hours === '0' && ' (No hours worked)'}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Manual Attendance Dialog */}
-      <Dialog open={isManualAttendanceOpen} onOpenChange={setIsManualAttendanceOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Mark Manual Attendance</DialogTitle>
-            <DialogDescription>
-              Manually mark attendance for an employee
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            {/* Employee Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="employee-select">Select Employee</Label>
-              <Select onValueChange={(value) => {
-                const employee = employees.find(emp => emp.whalesync_postgres_id === value);
-                setSelectedEmployeeForManual(employee);
-              }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose an employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees && employees.length > 0 ? employees.map((employee) => (
-                    <SelectItem key={employee.whalesync_postgres_id} value={employee.whalesync_postgres_id}>
-                      {employee.full_name} ({employee.employee_id})
-                    </SelectItem>
-                  )) : (
-                    <SelectItem value="no-employees" disabled>
-                      No employees available
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="status-select">Attendance Status</Label>
-              <Select 
-                value={manualAttendanceForm.status} 
-                onValueChange={(value) => setManualAttendanceForm(prev => ({ ...prev, status: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Present">Present</SelectItem>
-                  <SelectItem value="Absent">Absent</SelectItem>
-                  <SelectItem value="Half Day">Half Day</SelectItem>
-                  <SelectItem value="Late">Late</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Time Inputs */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="time-in">Time In</Label>
-                <Input
-                  id="time-in"
-                  type="time"
-                  value={manualAttendanceForm.timeIn}
-                  onChange={(e) => setManualAttendanceForm(prev => ({ ...prev, timeIn: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="time-out">Time Out</Label>
-                <Input
-                  id="time-out"
-                  type="time"
-                  value={manualAttendanceForm.timeOut}
-                  onChange={(e) => setManualAttendanceForm(prev => ({ ...prev, timeOut: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes (Optional)</Label>
-              <Textarea
-                id="notes"
-                placeholder="Add any notes about this attendance record..."
-                value={manualAttendanceForm.notes}
-                onChange={(e) => setManualAttendanceForm(prev => ({ ...prev, notes: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsManualAttendanceOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleManualAttendance} disabled={!selectedEmployeeForManual}>
-              Mark Attendance
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Attendance Dialog */}
-      <Dialog open={isEditAttendanceOpen} onOpenChange={setIsEditAttendanceOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Attendance Record</DialogTitle>
-            <DialogDescription>
-              Update attendance details for {editingRecord?.employee_name}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {editingRecord && (
-            <div className="space-y-4">
-              {/* Employee Info (Read-only) */}
-              <div className="space-y-2">
-                <Label>Employee</Label>
-                <div className="p-3 bg-muted rounded-md">
-                  <div className="font-medium">{editingRecord.employee_name}</div>
-                  <div className="text-sm text-muted-foreground">{editingRecord.employee_id} • {editingRecord.department}</div>
-                  <div className="text-sm text-muted-foreground">Date: {editingRecord.date}</div>
-                </div>
-              </div>
-
-              {/* Status Selection */}
-              <div className="space-y-2">
-                <Label htmlFor="edit-status-select">Attendance Status</Label>
-                <Select 
-                  value={editForm.status} 
-                  onValueChange={(value) => setEditForm(prev => ({ ...prev, status: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Present">Present</SelectItem>
-                    <SelectItem value="Absent">Absent</SelectItem>
-                    <SelectItem value="Half Day">Half Day</SelectItem>
-                    <SelectItem value="Late">Late</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Time Inputs */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-time-in">Time In</Label>
-                  <Input
-                    id="edit-time-in"
-                    type="time"
-                    value={editForm.timeIn}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, timeIn: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-time-out">Time Out</Label>
-                  <Input
-                    id="edit-time-out"
-                    type="time"
-                    value={editForm.timeOut}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, timeOut: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div className="space-y-2">
-                <Label htmlFor="edit-notes">Notes</Label>
-                <Textarea
-                  id="edit-notes"
-                  placeholder="Add any notes about this attendance record..."
-                  value={editForm.notes}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditAttendanceOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleUpdateAttendance}>
-              Update Attendance
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <EditAttendanceModal
+          isOpen={isEditAttendanceOpen}
+          onClose={() => setIsEditAttendanceOpen(false)}
+          editingRecord={editingRecord}
+          form={editForm}
+          onFormChange={setEditForm}
+          onSubmit={handleUpdateAttendance}
+        />
 
       </SidebarInset>
     </SidebarProvider>

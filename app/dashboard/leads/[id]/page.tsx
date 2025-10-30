@@ -4,13 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
+import { Card } from "@/components/ui/card";
 import { 
   Phone, Mail, MapPin, Briefcase, Calendar as CalendarIcon, 
   DollarSign, User, ChevronLeft, Building2, Tag,
@@ -21,6 +15,10 @@ import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import DispositionSection from "@/components/leadsdetailscomponent/DispositionSection";
 import CallHistory from "@/components/leadsdetailscomponent/CallHistory";
+import LeadHeader from "./components/LeadHeader";
+import LeadContactServiceCard from "./components/LeadContactServiceCard";
+import LeadBusinessDetailsCard from "./components/LeadBusinessDetailsCard";
+import AdditionalInfoCard from "./components/AdditionalInfoCard";
 
 interface Lead {
   whalesync_postgres_id: string;
@@ -207,101 +205,7 @@ export default function LeadDetailsPage() {
 
           {/* Main Content */}
           <div className="flex flex-1 flex-col gap-2 p-2 pt-0 overflow-auto">
-            {/* Lead Header Card */}
-            <Card className="bg-gradient-to-t from-primary/5 to-card shadow-sm">
-              <CardHeader className="pt-0 pb-2">
-                {/* Back Button - Above Photo */}
-                <div className="flex items-center mb-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => router.push("/dashboard/leads")}
-                    className="gap-2"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Back to Leads
-                  </Button>
-                </div>
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4">
-                  <Avatar className="h-20 w-20 border-2 border-border">
-                    {lead.assigned_to?.profile_photo && (
-                      <AvatarImage src={lead.assigned_to.profile_photo} alt={lead.name || "Lead"} />
-                    )}
-                    <AvatarFallback className="text-2xl font-bold">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-
-                  <div className="flex-1 space-y-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h1 className="text-3xl font-bold">{lead.name}</h1>
-                      {lead.stage && (
-                        <Badge className={getStageColor(lead.stage)}>
-                          {lead.stage}
-                        </Badge>
-                      )}
-                      {lead.lead_tag && (
-                        <Badge variant="outline" className="gap-1">
-                          <Tag className="h-3 w-3" />
-                          {lead.lead_tag}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                      {lead.mobile && (
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4" />
-                          <span>{lead.mobile}</span>
-                        </div>
-                      )}
-                      {lead.email && (
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4" />
-                          <span className="truncate max-w-[200px]">{lead.email}</span>
-                        </div>
-                      )}
-                      {lead.city && (
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4" />
-                          <span>{lead.city}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {lead.assigned_to && (
-                      <div className="text-sm text-muted-foreground">
-                        Assigned to: <span className="font-medium text-foreground">{lead.assigned_to.full_name}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Quick Actions */}
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="gap-2"
-                      onClick={() => window.location.href = `tel:${lead.mobile}`}
-                      disabled={!lead.mobile}
-                    >
-                      <Phone className="h-4 w-4" />
-                      Call
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-2"
-                      onClick={() => window.open(`https://wa.me/${lead.mobile}`, "_blank")}
-                      disabled={!lead.mobile}
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                      WhatsApp
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-            </Card>
+            <LeadHeader lead={lead} initials={initials} getStageColor={getStageColor} onBack={() => router.push("/dashboard/leads")} />
 
             {/* Disposition Section */}
             <DispositionSection
@@ -313,167 +217,21 @@ export default function LeadDetailsPage() {
 
             {/* Lead Information Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Contact & Service Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <User className="h-5 w-5" />
-                      Contact & Service Information
-                    </div>
-                    {!isEditing ? (
-                      <Button variant="outline" size="sm" onClick={handleEdit}>
-                        <Edit2 className="h-4 w-4 mr-2" />
-                        Edit
-                      </Button>
-                    ) : (
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={handleCancel}>
-                          <X className="h-4 w-4 mr-2" />
-                          Cancel
-                        </Button>
-                        <Button size="sm" onClick={handleSave}>
-                          <Save className="h-4 w-4 mr-2" />
-                          Save
-                        </Button>
-                      </div>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Service</p>
-                      {isEditing ? (
-                        <Select value={editData.services || ""} onValueChange={(value) => setEditData({...editData, services: value})}>
-                          <SelectTrigger className="mt-1">
-                            <SelectValue placeholder="Select service" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Brand Development">Brand Development</SelectItem>
-                            <SelectItem value="Canton Fair">Canton Fair</SelectItem>
-                            <SelectItem value="Video Call">Video Call</SelectItem>
-                            <SelectItem value="USA LLC Formation">USA LLC Formation</SelectItem>
-                            <SelectItem value="Dropshipping">Dropshipping</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <p className="text-sm font-medium mt-1">{lead.services || "-"}</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Source</p>
-                      <p className="text-sm font-medium mt-1">{lead.source || "-"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Date Added</p>
-                      <p className="text-sm font-medium mt-1">
-                        {lead.date_and_time ? new Date(lead.date_and_time).toLocaleDateString() : "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Follow Up Timeline</p>
-                      <p className="text-sm font-medium mt-1">{lead.follow_up_day || "-"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Follow Up Date</p>
-                      {isEditing ? (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="mt-1 w-full justify-start text-left font-normal"
-                            >
-                              <CalendarDays className="mr-2 h-4 w-4" />
-                              {followUpDate ? format(followUpDate, "PPP") : "Pick a date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={followUpDate}
-                              onSelect={setFollowUpDate}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      ) : (
-                        <p className="text-sm font-medium mt-1">
-                          {lead.follow_up_date ? new Date(lead.follow_up_date).toLocaleDateString() : "-"}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Interest Level</p>
-                      <p className="text-sm font-medium mt-1">{lead.call_remark || "-"}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Business Details */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Briefcase className="h-5 w-5" />
-                    Business Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Deal Amount</p>
-                      <p className="text-sm font-medium mt-1">
-                        {lead.deal_amount ? `₹${lead.deal_amount.toLocaleString()}` : "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Client Budget</p>
-                      <p className="text-sm font-medium mt-1">{lead.client_budget || "-"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Current Business Turnover</p>
-                      <p className="text-sm font-medium mt-1">{lead.current_business_turnover || "-"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Expected Closing</p>
-                      <p className="text-sm font-medium mt-1">
-                        {lead.expected_closing ? new Date(lead.expected_closing).toLocaleDateString() : "-"}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <LeadContactServiceCard
+                lead={lead}
+                isEditing={isEditing}
+                editData={editData}
+                setEditData={setEditData}
+                followUpDate={followUpDate}
+                setFollowUpDate={setFollowUpDate}
+                onEdit={handleEdit}
+                onCancel={handleCancel}
+                onSave={handleSave}
+              />
+              <LeadBusinessDetailsCard lead={lead} />
             </div>
 
-            {/* Additional Information */}
-            {(lead.any_other_interests || lead.call_notes) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Additional Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {lead.any_other_interests && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Other Interests</p>
-                      <p className="text-sm mt-1">{lead.any_other_interests}</p>
-                    </div>
-                  )}
-                  {lead.call_notes && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Call Notes</p>
-                      <p className="text-sm mt-1">{lead.call_notes}</p>
-                    </div>
-                  )}
-                  {lead.call_remark && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Call Remark</p>
-                      <p className="text-sm mt-1">{lead.call_remark}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            <AdditionalInfoCard lead={lead} />
 
             {/* Call History */}
             {lead.calls && lead.calls.length > 0 && (

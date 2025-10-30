@@ -7,6 +7,14 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Bell, Search, Settings, StickyNote, Save, X, Edit2, Loader2, Trash2, Pencil, Megaphone, CreditCard } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { QuickActionsDock } from "@/components/employee/QuickActionsDock"
@@ -29,6 +37,7 @@ import {
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Textarea } from "@/components/ui/textarea"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabaseClient"
 import { Bold, Type } from "lucide-react"
@@ -91,6 +100,7 @@ export function SiteHeader({
   notesStorageKey = "admin_quick_notes",
   useDatabase = false 
 }: SiteHeaderProps) {
+  const router = useRouter();
   const pathname = usePathname();
   const dynamicTitle = title || getPageTitle(pathname);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
@@ -101,6 +111,55 @@ export function SiteHeader({
   const [noteTitle, setNoteTitle] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
+  // Admin profile info
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [userName, setUserName] = useState<string>("Admin");
+  const [userInitials, setUserInitials] = useState<string>("AU");
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) {
+          setUserEmail(user.email);
+          // Try to resolve display name from Employee Directory using official_email
+          try {
+            const { data: employee } = await supabase
+              .from("Employee Directory")
+              .select("full_name")
+              .eq("official_email", user.email)
+              .single();
+            const displayName = employee?.full_name || "Admin";
+            setUserName(displayName);
+            const initials = (displayName || user.email)
+              .split(/[\s._-]+/)
+              .map((n: string) => n.charAt(0).toUpperCase())
+              .join("")
+              .substring(0, 2) || "AU";
+            setUserInitials(initials);
+          } catch {
+            const namePart = user.email.split("@")[0];
+            setUserName(namePart);
+            const initialsFallback = namePart
+              .split(".")
+              .map((n) => n.charAt(0).toUpperCase())
+              .join("")
+              .substring(0, 2) || "AU";
+            setUserInitials(initialsFallback);
+          }
+        }
+      } catch {}
+    };
+    loadUser();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      router.push("/login");
+    } catch {}
+  };
 
   // Load notes from database or localStorage on mount
   useEffect(() => {
@@ -461,20 +520,34 @@ export function SiteHeader({
             </TooltipContent>
           </Tooltip>
 
-          {/* User Avatar */}
-          <Tooltip>
-            <TooltipTrigger asChild>
+        {/* Admin Profile */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg">
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src="" alt="User" />
+                <AvatarImage src="" alt={userEmail || "Admin"} />
                 <AvatarFallback className="rounded-lg bg-primary text-primary-foreground font-semibold">
-                  AU
+                  {userInitials}
                 </AvatarFallback>
               </Avatar>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>User Profile</p>
-            </TooltipContent>
-          </Tooltip>
+              <span className="sr-only">Open profile menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm font-medium leading-none">{userName}</p>
+                {userEmail && (
+                  <p className="text-xs leading-none text-muted-foreground">{userEmail}</p>
+                )}
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push("/dashboard/admin")}>Account</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout} className="text-red-600">Log out</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         </div>
       </div>
     </header>

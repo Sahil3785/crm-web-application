@@ -1,39 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-// Removed duplicate sidebar imports - using layout components instead
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, Clock, AlertCircle, XCircle, Calendar, GripVertical, Search, Download, LayoutGrid, Table2, ArrowUpDown, ArrowUp, ArrowDown, CalendarDays, Edit, Save, X, Plus, Share, Upload, File, Paperclip, Filter, Target, Calendar as CalendarIcon } from "lucide-react";
+import { Plus, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  useDroppable,
-  closestCenter,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import {
-  useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+
+// Import components
+import TaskStatisticsCards from "./components/TaskStatisticsCards";
+import TaskFilters from "./components/TaskFilters";
+import TaskKanbanView from "./components/TaskKanbanView";
+import TaskTableView from "./components/TaskTableView";
+import TaskCalendarView from "./components/TaskCalendarView";
+import EditTaskModal from "./components/EditTaskModal";
+import CreateTaskModal from "./components/CreateTaskModal";
+import ShareTaskModal from "./components/ShareTaskModal";
+import TaskDetailsModal from "./components/TaskDetailsModal";
 
 interface Task {
   id: string;
@@ -62,6 +45,7 @@ export default function EmployeeTasksPage() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [isClient, setIsClient] = useState(false);
   
   // Edit task states
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -104,19 +88,22 @@ export default function EmployeeTasksPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [sortField, setSortField] = useState<string>("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
-  );
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // Set client-side flag to prevent hydration issues
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
-    loadCurrentUser();
-    loadEmployees();
-  }, []);
+    if (isClient) {
+      loadCurrentUser();
+      loadEmployees();
+    }
+  }, [isClient]);
 
   const loadCurrentUser = async () => {
     try {
@@ -298,8 +285,8 @@ export default function EmployeeTasksPage() {
 
       toast.success("Task status updated!");
     } catch (error: any) {
-      console.error("Error updating task:", error);
-      toast.error(`Failed to update task: ${error.message || 'Unknown error'}`);
+      console.error("Error updating task status:", error);
+      toast.error(`Failed to update task: ${error.message}`);
     }
   };
 
@@ -309,16 +296,14 @@ export default function EmployeeTasksPage() {
       title: task.title,
       description: task.description || "",
       priority: task.priority,
-      due_date: task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : "",
+      due_date: task.due_date || "",
     });
+    setEditAttachments([]);
     setIsEditDialogOpen(true);
   };
 
   const handleSaveEdit = async () => {
-    if (!editingTask || !editForm.title.trim()) {
-      toast.error("Please enter a task title");
-      return;
-    }
+    if (!editingTask) return;
 
     try {
       const updateData = {
@@ -336,6 +321,43 @@ export default function EmployeeTasksPage() {
 
       if (error) throw error;
 
+      // Upload files if any
+      if (editAttachments.length > 0) {
+        try {
+          const uploadedFiles = await uploadFilesToSupabase(editAttachments, editingTask.id);
+          
+          if (uploadedFiles.length > 0) {
+            // Update task with attachments
+            const { error: updateError } = await supabase
+              .from("tasks")
+              .update({ attachments: uploadedFiles })
+              .eq("id", editingTask.id);
+            
+            if (updateError) {
+              console.error("Error updating task with attachments:", {
+                error: updateError,
+                errorString: JSON.stringify(updateError),
+                errorMessage: updateError?.message,
+                errorCode: updateError?.code,
+                errorDetails: updateError?.details,
+                errorHint: updateError?.hint
+              });
+              toast.error(`Failed to update task attachments: ${updateError.message || updateError.code || 'Unknown error'}`);
+            } else {
+              console.log("Successfully updated task with attachments:", uploadedFiles);
+            }
+          }
+        } catch (uploadError: any) {
+          console.error("Error in file upload process:", {
+            error: uploadError,
+            errorString: JSON.stringify(uploadError),
+            errorMessage: uploadError?.message,
+            stack: uploadError?.stack
+          });
+          toast.error(`Failed to upload files: ${uploadError?.message || 'Unknown upload error'}`);
+        }
+      }
+
       // Update local state
       setTasks(prevTasks =>
         prevTasks.map(task =>
@@ -345,10 +367,17 @@ export default function EmployeeTasksPage() {
 
       setIsEditDialogOpen(false);
       setEditingTask(null);
+      setEditForm({
+        title: "",
+        description: "",
+        priority: "medium",
+        due_date: "",
+      });
+      setEditAttachments([]);
       toast.success("Task updated successfully!");
     } catch (error: any) {
       console.error("Error updating task:", error);
-      toast.error(`Failed to update task: ${error.message || 'Unknown error'}`);
+      toast.error(`Failed to update task: ${error.message}`);
     }
   };
 
@@ -361,6 +390,7 @@ export default function EmployeeTasksPage() {
       priority: "medium",
       due_date: "",
     });
+    setEditAttachments([]);
   };
 
   const handleCreateTask = () => {
@@ -376,13 +406,8 @@ export default function EmployeeTasksPage() {
   };
 
   const handleSaveCreate = async () => {
-    if (!createForm.title.trim()) {
-      toast.error("Please enter a task title");
-      return;
-    }
-
-    if (!createForm.assignee) {
-      toast.error("Please select an assignee");
+    if (!createForm.title || !createForm.assignee) {
+      toast.error("Please fill in all required fields");
       return;
     }
 
@@ -408,16 +433,38 @@ export default function EmployeeTasksPage() {
 
       // Upload files if any
       if (createAttachments.length > 0) {
-        const uploadedFiles = await uploadFilesToSupabase(createAttachments, data.id);
-        
-        // Update task with attachments
-        const { error: updateError } = await supabase
-          .from("tasks")
-          .update({ attachments: uploadedFiles })
-          .eq("id", data.id);
-        
-        if (updateError) {
-          console.error("Error updating task with attachments:", updateError);
+        try {
+          const uploadedFiles = await uploadFilesToSupabase(createAttachments, data.id);
+          
+          if (uploadedFiles.length > 0) {
+            // Update task with attachments
+            const { error: updateError } = await supabase
+              .from("tasks")
+              .update({ attachments: uploadedFiles })
+              .eq("id", data.id);
+            
+            if (updateError) {
+              console.error("Error updating task with attachments:", {
+                error: updateError,
+                errorString: JSON.stringify(updateError),
+                errorMessage: updateError?.message,
+                errorCode: updateError?.code,
+                errorDetails: updateError?.details,
+                errorHint: updateError?.hint
+              });
+              toast.error(`Failed to update task attachments: ${updateError.message || updateError.code || 'Unknown error'}`);
+            } else {
+              console.log("Successfully updated task with attachments:", uploadedFiles);
+            }
+          }
+        } catch (uploadError: any) {
+          console.error("Error in file upload process:", {
+            error: uploadError,
+            errorString: JSON.stringify(uploadError),
+            errorMessage: uploadError?.message,
+            stack: uploadError?.stack
+          });
+          toast.error(`Failed to upload files: ${uploadError?.message || 'Unknown upload error'}`);
         }
       }
 
@@ -436,7 +483,7 @@ export default function EmployeeTasksPage() {
       toast.success("Task created successfully!");
     } catch (error: any) {
       console.error("Error creating task:", error);
-      toast.error(`Failed to create task: ${error.message || 'Unknown error'}`);
+      toast.error(`Failed to create task: ${error.message}`);
     }
   };
 
@@ -450,28 +497,6 @@ export default function EmployeeTasksPage() {
       assignee: "",
     });
     setCreateAttachments([]);
-  };
-
-  const handleDeleteTask = async (taskId: string) => {
-    if (!confirm("Are you sure you want to delete this task?")) {
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from("tasks")
-        .delete()
-        .eq("id", taskId);
-
-      if (error) throw error;
-
-      // Remove from local state
-      setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
-      toast.success("Task deleted successfully!");
-    } catch (error: any) {
-      console.error("Error deleting task:", error);
-      toast.error(`Failed to delete task: ${error.message || 'Unknown error'}`);
-    }
   };
 
   const handleShareTask = (task: Task) => {
@@ -491,7 +516,6 @@ export default function EmployeeTasksPage() {
     }
 
     try {
-      // Create a new task with the same details but assigned to the selected employee
       const sharedTask = {
         title: sharingTask.title,
         description: sharingTask.description,
@@ -515,16 +539,38 @@ export default function EmployeeTasksPage() {
 
       // Upload files if any
       if (shareAttachments.length > 0) {
-        const uploadedFiles = await uploadFilesToSupabase(shareAttachments, data.id);
-        
-        // Update task with attachments
-        const { error: updateError } = await supabase
-          .from("tasks")
-          .update({ attachments: uploadedFiles })
-          .eq("id", data.id);
-        
-        if (updateError) {
-          console.error("Error updating shared task with attachments:", updateError);
+        try {
+          const uploadedFiles = await uploadFilesToSupabase(shareAttachments, data.id);
+          
+          if (uploadedFiles.length > 0) {
+            // Update task with attachments
+            const { error: updateError } = await supabase
+              .from("tasks")
+              .update({ attachments: uploadedFiles })
+              .eq("id", data.id);
+            
+            if (updateError) {
+              console.error("Error updating shared task with attachments:", {
+                error: updateError,
+                errorString: JSON.stringify(updateError),
+                errorMessage: updateError?.message,
+                errorCode: updateError?.code,
+                errorDetails: updateError?.details,
+                errorHint: updateError?.hint
+              });
+              toast.error(`Failed to update shared task attachments: ${updateError.message || updateError.code || 'Unknown error'}`);
+            } else {
+              console.log("Successfully updated shared task with attachments:", uploadedFiles);
+            }
+          }
+        } catch (uploadError: any) {
+          console.error("Error in file upload process:", {
+            error: uploadError,
+            errorString: JSON.stringify(uploadError),
+            errorMessage: uploadError?.message,
+            stack: uploadError?.stack
+          });
+          toast.error(`Failed to upload files: ${uploadError?.message || 'Unknown upload error'}`);
         }
       }
 
@@ -578,19 +624,50 @@ export default function EmployeeTasksPage() {
 
   const uploadFilesToSupabase = async (files: File[], taskId: string) => {
     const uploadedFiles = [];
+    const errors = [];
+    
+    // Debug Supabase client configuration
+    console.log('Supabase client URL:', supabase.supabaseUrl);
+    console.log('Supabase client key exists:', !!supabase.supabaseKey);
     
     for (const file of files) {
       try {
         const fileExt = file.name.split('.').pop();
-        const fileName = `${taskId}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        // Generate unique ID only on client side to avoid hydration issues
+        let uniqueId: string;
+        if (typeof window !== 'undefined' && crypto.randomUUID) {
+          uniqueId = crypto.randomUUID();
+        } else {
+          // Fallback for server-side or older browsers
+          uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2)}`;
+        }
+        const fileName = `${taskId}-${uniqueId}.${fileExt}`;
         const filePath = `task-attachments/${fileName}`;
+        
+        console.log(`Uploading file: ${file.name} to path: ${filePath}`);
         
         const { data, error } = await supabase.storage
           .from('documents')
           .upload(filePath, file);
         
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase storage error for file:', file.name, {
+            error: error,
+            errorString: JSON.stringify(error),
+            errorMessage: error?.message,
+            errorCode: error?.code,
+            errorDetails: error?.details,
+            errorHint: error?.hint
+          });
+          errors.push({
+            fileName: file.name,
+            error: error,
+            errorMessage: error.message || error.code || 'Unknown storage error'
+          });
+          continue; // Skip this file and continue with others
+        }
         
+        console.log(`Successfully uploaded file: ${file.name}`);
         uploadedFiles.push({
           name: file.name,
           path: filePath,
@@ -598,9 +675,24 @@ export default function EmployeeTasksPage() {
           type: file.type
         });
       } catch (error: any) {
-        console.error('Error uploading file:', error);
-        toast.error(`Failed to upload ${file.name}: ${error.message}`);
+        console.error('Error uploading file:', file.name, {
+          error: error,
+          errorString: JSON.stringify(error),
+          errorMessage: error?.message,
+          stack: error?.stack
+        });
+        errors.push({
+          fileName: file.name,
+          error: error,
+          errorMessage: error?.message || error?.toString() || 'Unknown error occurred'
+        });
       }
+    }
+    
+    // Show error summary if there were any errors
+    if (errors.length > 0) {
+      const errorSummary = errors.map(e => `${e.fileName}: ${e.errorMessage}`).join(', ');
+      toast.error(`Some files failed to upload: ${errorSummary}`);
     }
     
     return uploadedFiles;
@@ -628,13 +720,13 @@ export default function EmployeeTasksPage() {
     }
   };
 
-  const handleDragStart = (event: DragStartEvent) => {
+  const handleDragStart = (event: any) => {
     const { active } = event;
     const task = tasks.find(task => task.id === active.id);
     setActiveTask(task || null);
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = (event: any) => {
     const { active, over } = event;
     setActiveTask(null);
 
@@ -669,15 +761,6 @@ export default function EmployeeTasksPage() {
     }
   };
 
-  const getSortIcon = (field: string) => {
-    if (sortField !== field) {
-      return <ArrowUpDown className="h-4 w-4 text-muted-foreground" />;
-    }
-    return sortDirection === "asc" ? 
-      <ArrowUp className="h-4 w-4 text-foreground" /> : 
-      <ArrowDown className="h-4 w-4 text-foreground" />;
-  };
-
   const handleExport = () => {
     const csvContent = [
       ['Title', 'Description', 'Priority', 'Status', 'Due Date'],
@@ -697,107 +780,13 @@ export default function EmployeeTasksPage() {
     a.download = `tasks-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
-    toast.success('Tasks exported successfully!');
+    toast.success("Tasks exported successfully!");
   };
 
-
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high": return "destructive";
-      case "medium": return "default";
-      case "low": return "secondary";
-      default: return "default";
-    }
-  };
-
-  const getPriorityBadgeStyle = (priority: string) => {
-    switch (priority) {
-      case "high": return "bg-red-500 text-white";
-      case "medium": return "bg-gray-500 text-white";
-      case "low": return "bg-blue-500 text-white";
-      default: return "bg-gray-500 text-white";
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed": return "bg-green-500 text-white";
-      case "in_progress": return "bg-blue-500 text-white";
-      case "pending": return "bg-yellow-500 text-white";
-      case "cancelled": return "bg-red-500 text-white";
-      default: return "bg-gray-500 text-white";
-    }
-  };
-
-  // Calendar view helper functions
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
-    
-    const days = [];
-    
-    // Add empty cells for days before the first day of the month
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null);
-    }
-    
-    // Add days of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push(new Date(year, month, day));
-    }
-    
-    return days;
-  };
-
-  const getTasksForDate = (date: Date) => {
-    if (!date) return [];
-    const dateStr = date.toISOString().split('T')[0];
-    return filteredTasks.filter(task => {
-      if (!task.due_date) return false;
-      const taskDate = new Date(task.due_date).toISOString().split('T')[0];
-      return taskDate === dateStr;
-    });
-  };
-
-  const isToday = (date: Date) => {
-    const today = new Date();
-    return date.getDate() === today.getDate() &&
-           date.getMonth() === today.getMonth() &&
-           date.getFullYear() === today.getFullYear();
-  };
-
-  const isOverdue = (date: Date) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return date < today;
-  };
-
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    setCurrentDate(prev => {
-      const newDate = new Date(prev);
-      if (direction === 'prev') {
-        newDate.setMonth(newDate.getMonth() - 1);
-      } else {
-        newDate.setMonth(newDate.getMonth() + 1);
-      }
-      return newDate;
-    });
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "completed": return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case "in_progress": return <AlertCircle className="h-4 w-4 text-blue-600" />;
-      case "pending": return <Clock className="h-4 w-4 text-yellow-600" />;
-      case "cancelled": return <XCircle className="h-4 w-4 text-red-600" />;
-      default: return <Clock className="h-4 w-4 text-gray-600" />;
-    }
-  };
+  // Reset pagination when filters/sorting change
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, statusFilter, priorityFilter, dateFilter, sortField, sortDirection]);
 
   // Clear all filters function
   const clearAllFilters = () => {
@@ -869,6 +858,88 @@ export default function EmployeeTasksPage() {
   const inProgressTasks = filteredTasks.filter(task => task.status === "in_progress");
   const completedTasks = filteredTasks.filter(task => task.status === "completed");
 
+  // Pagination
+  const totalCount = filteredTasks.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const paginatedTasks = filteredTasks.slice((page - 1) * pageSize, page * pageSize);
+
+  // Helper functions
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high':
+        return 'bg-red-100 text-red-800';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'low':
+        return 'bg-green-100 text-green-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString();
+  };
+
+  const isOverdue = (date: string) => {
+    return new Date(date) < new Date();
+  };
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    
+    // Add empty cells for days before the first day of the month
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null);
+    }
+    
+    // Add days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      days.push(new Date(year, month, day));
+    }
+    
+    return days;
+  };
+
+  const getTasksForDate = (date: Date) => {
+    const dateString = date.toISOString().split('T')[0];
+    return filteredTasks.filter(task => task.due_date === dateString);
+  };
+
+  const isToday = (date: Date) => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
+
+  const isOverdueDate = (date: Date) => {
+    const today = new Date();
+    return date < today;
+  };
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    setCurrentDate(prev => {
+      const newDate = new Date(prev);
+      if (direction === 'prev') {
+        newDate.setMonth(newDate.getMonth() - 1);
+      } else {
+        newDate.setMonth(newDate.getMonth() + 1);
+      }
+      return newDate;
+    });
+  };
+
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task);
+    setIsDetailsOpen(true);
+  };
+
   // Debug logging
   console.log("Tasks state:", { 
     totalTasks: tasks.length, 
@@ -877,1202 +948,169 @@ export default function EmployeeTasksPage() {
     completed: completedTasks.length 
   });
 
-  // Droppable Column Component
-  const DroppableColumn = ({ status, children, title, icon, count }: { 
-    status: string; 
-    children: React.ReactNode; 
-    title: string; 
-    icon: React.ReactNode; 
-    count: number;
-  }) => {
-    const { setNodeRef, isOver } = useDroppable({
-      id: status,
-    });
-
+  if (!isClient || loading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {icon}
-            {title} ({count})
-          </CardTitle>
-        </CardHeader>
-        <CardContent 
-          ref={setNodeRef}
-          className={`space-y-3 min-h-[200px] transition-all duration-200 ${isOver ? 'bg-muted/50 border-2 border-dashed border-muted-foreground/50' : ''}`}
-        >
-          {children}
-          {count === 0 && (
-            <div className="text-center text-sm text-muted-foreground mt-4">
-              Drop tasks here
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    );
-  };
-
-  // Calendar View Component
-  const CalendarView = () => {
-    const days = getDaysInMonth(currentDate);
-    const monthNames = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
-    ];
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-    return (
-      <div className="space-y-4">
-        {/* Calendar Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-foreground">
-              {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-            </h2>
-            <p className="text-xs text-muted-foreground">Click on tasks to view details</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateMonth('prev')}
-              className="bg-background border-muted-foreground/30 text-foreground hover:bg-muted/50 h-8 px-2"
-            >
-              ←
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentDate(new Date())}
-              className="bg-background border-muted-foreground/30 text-foreground hover:bg-muted/50 h-8 px-2"
-            >
-              Today
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateMonth('next')}
-              className="bg-background border-muted-foreground/30 text-foreground hover:bg-muted/50 h-8 px-2"
-            >
-              →
-            </Button>
-          </div>
-        </div>
-
-        {/* Calendar Grid */}
-        <div className="bg-gradient-to-br from-muted/50 to-background border border-border/50 rounded-lg overflow-hidden shadow-sm">
-          {/* Day Headers */}
-          <div className="grid grid-cols-7 border-b border-border/50 bg-muted/30">
-            {dayNames.map(day => (
-              <div key={day} className="p-2 text-center font-semibold text-xs text-foreground border-r border-border/30 last:border-r-0">
-                {day}
-              </div>
-            ))}
-          </div>
-
-          {/* Calendar Days */}
-          <div className="grid grid-cols-7">
-            {days.map((date, index) => {
-              if (!date) {
-                return <div key={index} className="h-20 border-r border-b border-border/30 last:border-r-0 bg-muted/20"></div>;
-              }
-
-              const tasksForDate = getTasksForDate(date);
-              const isCurrentDay = isToday(date);
-              const isOverdueDay = isOverdue(date);
-
-              return (
-                <div
-                  key={index}
-                  className={`h-20 border-r border-b border-border/30 last:border-r-0 p-2 transition-all duration-200 ${
-                    isCurrentDay ? 'bg-gradient-to-br from-primary/20 to-primary/5' : ''
-                  } ${isOverdueDay ? 'bg-gradient-to-br from-gray-400/40 to-gray-300/30' : ''} hover:bg-muted/30`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`text-xs font-semibold ${
-                      isCurrentDay ? 'text-primary' : 'text-foreground'
-                    } ${isOverdueDay ? 'text-muted-foreground' : ''}`}>
-                      {date.getDate()}
-                    </span>
-                    {tasksForDate.length > 0 && (
-                      <Badge 
-                        variant="secondary" 
-                        className="text-xs bg-primary/10 text-primary border-primary/20 h-4 px-1"
-                      >
-                        {tasksForDate.length}
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-0.5">
-                    {tasksForDate.slice(0, 1).map(task => (
-                      <div
-                        key={task.id}
-                        onClick={() => handleEditTask(task)}
-                        className={`text-xs p-1 rounded truncate cursor-pointer transition-all duration-200 hover:shadow-sm ${
-                          task.status === 'completed' ? 'bg-gradient-to-r from-green-500/20 to-green-500/10 text-green-700 border border-green-200/50' :
-                          task.status === 'in_progress' ? 'bg-gradient-to-r from-blue-500/20 to-blue-500/10 text-blue-700 border border-blue-200/50' :
-                          task.status === 'pending' ? 'bg-gradient-to-r from-yellow-500/20 to-yellow-500/10 text-yellow-700 border border-yellow-200/50' :
-                          'bg-gradient-to-r from-gray-500/20 to-gray-500/10 text-gray-700 border border-gray-200/50'
-                        }`}
-                        title={`${task.title} - Click to view details`}
-                      >
-                        <div className="flex items-center gap-1">
-                          <div className={`w-1.5 h-1.5 rounded-full ${
-                            task.status === 'completed' ? 'bg-green-500' :
-                            task.status === 'in_progress' ? 'bg-blue-500' :
-                            task.status === 'pending' ? 'bg-yellow-500' :
-                            'bg-gray-500'
-                          }`}></div>
-                          <span className="truncate">{task.title}</span>
-                        </div>
-                      </div>
-                    ))}
-                    {tasksForDate.length > 1 && (
-                      <div className="text-xs text-muted-foreground font-medium">
-                        +{tasksForDate.length - 1} more
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Calendar Legend */}
-        <div className="flex items-center justify-center gap-4 p-3 bg-muted/30 rounded-lg border border-border/50">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-green-500"></div>
-            <span className="text-xs text-foreground">Completed</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-            <span className="text-xs text-foreground">In Progress</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-            <span className="text-xs text-foreground">Pending</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-gray-500"></div>
-            <span className="text-xs text-foreground">Cancelled</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Sortable Task Component
-  const SortableTask = ({ task }: { task: Task }) => {
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-      isDragging,
-    } = useSortable({ id: task.id });
-
-    const style = {
-      transform: CSS.Transform.toString(transform),
-      transition,
-    };
-
-    return (
-      <Card 
-        ref={setNodeRef} 
-        style={style}
-        className={`p-3 cursor-move border-2 border-transparent hover:border-muted-foreground/20 ${isDragging ? 'opacity-50 shadow-lg scale-105 border-primary/50' : 'hover:shadow-md'} transition-all duration-200`}
-        {...attributes}
-        {...listeners}
-      >
-        <div className="space-y-2">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-md border border-border bg-muted/50 flex items-center justify-center">
-                <GripVertical className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <h4 className="font-medium text-sm">{task.title}</h4>
-            </div>
-            <Badge variant={getPriorityColor(task.priority) as any} className="text-xs">
-              {task.priority}
-            </Badge>
-          </div>
-          {task.description && (
-            <p className="text-xs text-muted-foreground">{task.description}</p>
-          )}
-          {task.due_date && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Calendar className="h-3 w-3" />
-              Due: {new Date(task.due_date).toLocaleDateString()}
-            </div>
-          )}
-          
-          {/* Attachments */}
-          {task.attachments && task.attachments.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Paperclip className="h-3 w-3" />
-                <span>Attachments ({task.attachments.length})</span>
-              </div>
-              <div className="space-y-1">
-                {task.attachments.slice(0, 2).map((file, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      downloadFile(file);
-                    }}
-                    title={`Download ${file.name}`}
-                  >
-                    <File className="h-3 w-3" />
-                    <span className="truncate">{file.name}</span>
-                  </div>
-                ))}
-                {task.attachments.length > 2 && (
-                  <div className="text-xs text-muted-foreground">
-                    +{task.attachments.length - 2} more files
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-          
-          <div className="text-xs text-muted-foreground/60 italic">
-            Drag card to move between columns
-          </div>
-          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-            <Select
-              value={task.status}
-              onValueChange={(value) => handleUpdateStatus(task.id, value)}
-            >
-              <SelectTrigger className="h-8 text-xs flex-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleEditTask(task)}
-              className="h-8 px-2"
-            >
-              <Edit className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleShareTask(task)}
-              className="h-8 px-2"
-              title="Share task with another employee"
-            >
-              <Share className="h-3 w-3" />
-            </Button>
-          </div>
-        </div>
-      </Card>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="space-y-4">
-          <div className="h-8 bg-gray-200 rounded animate-pulse" />
-          <div className="h-32 bg-gray-200 rounded animate-pulse" />
-          <div className="h-64 bg-gray-200 rounded animate-pulse" />
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading tasks...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="@container/main flex flex-1 flex-col gap-2">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 px-2">
-              {/* Summary Cards */}
-              <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
-                <Card className="@container/card">
-                  <CardHeader>
-                    <CardDescription className="flex items-center justify-between">
-                      <span>Total Tasks</span>
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                    </CardDescription>
-                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                      {filteredTasks.length}
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
-                <Card className="@container/card">
-                  <CardHeader>
-                    <CardDescription className="flex items-center justify-between">
-                      <span>In Progress</span>
-                      <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                    </CardDescription>
-                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                      {inProgressTasks.length}
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
-                <Card className="@container/card">
-                  <CardHeader>
-                    <CardDescription className="flex items-center justify-between">
-                      <span>Completed</span>
-                      <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                    </CardDescription>
-                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                      {completedTasks.length}
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
-              </div>
+    <div className="space-y-3 p-4 pb-2">
+      {/* Header - Removed as requested */}
 
-              {/* Filter Bar */}
-              <div className="flex items-center justify-between gap-4 px-4 lg:px-6">
-                {/* Left Side - Search Bar */}
-                <div className="flex-1 max-w-[400px]">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search using Name or Phone"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 bg-background border-muted-foreground/30 focus:border-primary text-foreground"
-                    />
-                  </div>
-                </div>
-                
-                {/* Right Side - Filters, Buttons, and View Toggle */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  {/* Status Filter - Multi-selector */}
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-[140px] h-9 justify-start text-left font-normal text-sm bg-background border-muted-foreground/30 text-foreground">
-                        <Filter className="mr-2 h-4 w-4" />
-                        {statusFilter.length === 0 ? "All Status" : `${statusFilter.length} selected`}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-64 p-0" align="start">
-                      <div className="p-3 border-b">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">Filter by Status</span>
-                          {statusFilter.length > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setStatusFilter([])}
-                              className="h-6 px-2 text-xs"
-                            >
-                              Clear All
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto">
-                        <div className="p-2">
-                          <div className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md cursor-pointer"
-                               onClick={() => setStatusFilter([])}>
-                            <input
-                              type="checkbox"
-                              checked={statusFilter.length === 0}
-                              onChange={() => setStatusFilter([])}
-                              className="rounded border-gray-300"
-                            />
-                            <span className="text-sm">All Status</span>
-                          </div>
-                          {["pending", "in_progress", "completed", "cancelled"].map((status) => (
-                            <div key={status} className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md cursor-pointer"
-                                 onClick={() => {
-                                   if (statusFilter.includes(status)) {
-                                     setStatusFilter(statusFilter.filter(s => s !== status));
-                                   } else {
-                                     setStatusFilter([...statusFilter, status]);
-                                   }
-                                 }}>
-                              <input
-                                type="checkbox"
-                                checked={statusFilter.includes(status)}
-                                onChange={() => {
-                                  if (statusFilter.includes(status)) {
-                                    setStatusFilter(statusFilter.filter(s => s !== status));
-                                  } else {
-                                    setStatusFilter([...statusFilter, status]);
-                                  }
-                                }}
-                                className="rounded border-gray-300"
-                              />
-                              <span className="text-sm capitalize">{status.replace('_', ' ')}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                  
-                  {/* Priority Filter - Multi-selector */}
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-[140px] h-9 justify-start text-left font-normal text-sm bg-background border-muted-foreground/30 text-foreground">
-                        <Target className="mr-2 h-4 w-4" />
-                        {priorityFilter.length === 0 ? "All Priority" : `${priorityFilter.length} selected`}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-64 p-0" align="start">
-                      <div className="p-3 border-b">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">Filter by Priority</span>
-                          {priorityFilter.length > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setPriorityFilter([])}
-                              className="h-6 px-2 text-xs"
-                            >
-                              Clear All
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto">
-                        <div className="p-2">
-                          <div className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md cursor-pointer"
-                               onClick={() => setPriorityFilter([])}>
-                            <input
-                              type="checkbox"
-                              checked={priorityFilter.length === 0}
-                              onChange={() => setPriorityFilter([])}
-                              className="rounded border-gray-300"
-                            />
-                            <span className="text-sm">All Priority</span>
-                          </div>
-                          {["high", "medium", "low"].map((priority) => (
-                            <div key={priority} className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md cursor-pointer"
-                                 onClick={() => {
-                                   if (priorityFilter.includes(priority)) {
-                                     setPriorityFilter(priorityFilter.filter(p => p !== priority));
-                                   } else {
-                                     setPriorityFilter([...priorityFilter, priority]);
-                                   }
-                                 }}>
-                              <input
-                                type="checkbox"
-                                checked={priorityFilter.includes(priority)}
-                                onChange={() => {
-                                  if (priorityFilter.includes(priority)) {
-                                    setPriorityFilter(priorityFilter.filter(p => p !== priority));
-                                  } else {
-                                    setPriorityFilter([...priorityFilter, priority]);
-                                  }
-                                }}
-                                className="rounded border-gray-300"
-                              />
-                              <span className="text-sm capitalize">{priority}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                  
-                  {/* Date Filter - Multi-selector */}
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-[140px] h-9 justify-start text-left font-normal text-sm bg-background border-muted-foreground/30 text-foreground">
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateFilter.length === 0 ? "All Dates" : `${dateFilter.length} selected`}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-64 p-0" align="start">
-                      <div className="p-3 border-b">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">Filter by Date</span>
-                          {dateFilter.length > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setDateFilter([])}
-                              className="h-6 px-2 text-xs"
-                            >
-                              Clear All
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto">
-                        <div className="p-2">
-                          <div className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md cursor-pointer"
-                               onClick={() => setDateFilter([])}>
-                            <input
-                              type="checkbox"
-                              checked={dateFilter.length === 0}
-                              onChange={() => setDateFilter([])}
-                              className="rounded border-gray-300"
-                            />
-                            <span className="text-sm">All Dates</span>
-                          </div>
-                          {[
-                            { value: "today", label: "Today" },
-                            { value: "tomorrow", label: "Tomorrow" },
-                            { value: "this_week", label: "This Week" },
-                            { value: "overdue", label: "Overdue" }
-                          ].map((date) => (
-                            <div key={date.value} className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md cursor-pointer"
-                                 onClick={() => {
-                                   if (dateFilter.includes(date.value)) {
-                                     setDateFilter(dateFilter.filter(d => d !== date.value));
-                                   } else {
-                                     setDateFilter([...dateFilter, date.value]);
-                                   }
-                                 }}>
-                              <input
-                                type="checkbox"
-                                checked={dateFilter.includes(date.value)}
-                                onChange={() => {
-                                  if (dateFilter.includes(date.value)) {
-                                    setDateFilter(dateFilter.filter(d => d !== date.value));
-                                  } else {
-                                    setDateFilter([...dateFilter, date.value]);
-                                  }
-                                }}
-                                className="rounded border-gray-300"
-                              />
-                              <span className="text-sm">{date.label}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+      {/* Statistics Cards */}
+      <TaskStatisticsCards
+        filteredTasks={filteredTasks}
+        pendingTasks={pendingTasks}
+        inProgressTasks={inProgressTasks}
+        completedTasks={completedTasks}
+      />
 
-                  {/* Clear All Filters Button */}
-                  {(searchTerm || statusFilter.length > 0 || priorityFilter.length > 0 || dateFilter.length > 0) && (
-                    <Button 
-                      variant="outline" 
-                      className="gap-2 h-9 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 bg-background border-muted-foreground/30"
-                      onClick={clearAllFilters}
-                    >
-                      <X className="h-4 w-4" />
-                      Clear All
-                    </Button>
-                  )}
-                  
-                  {/* Create Task Button */}
-                  <Button 
-                    variant="default" 
-                    className="gap-2"
-                    onClick={handleCreateTask}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Create Task
-                  </Button>
-                  
-                  {/* Export Button */}
-                  <Button 
-                    variant="outline" 
-                    className="gap-2 bg-background border-muted-foreground/30 text-foreground"
-                    onClick={handleExport}
-                  >
-                    <Download className="h-4 w-4" />
-                    Export
-                  </Button>
-                  
-                  {/* View Toggle Buttons */}
-                  <div className="flex border border-muted-foreground/30 rounded-md overflow-hidden">
-                    <Button
-                      variant={viewMode === "kanban" ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setViewMode("kanban")}
-                      className="rounded-none border-0 px-3"
-                      title="Kanban View"
-                    >
-                      <LayoutGrid className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant={viewMode === "table" ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setViewMode("table")}
-                      className="rounded-none border-0 px-3"
-                      title="Table View"
-                    >
-                      <Table2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant={viewMode === "calendar" ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setViewMode("calendar")}
-                      className="rounded-none border-0 px-3"
-                      title="Calendar View"
-                    >
-                      <CalendarDays className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
+      {/* Filters */}
+      <TaskFilters
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        priorityFilter={priorityFilter}
+        setPriorityFilter={setPriorityFilter}
+        dateFilter={dateFilter}
+        setDateFilter={setDateFilter}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        handleExport={handleExport}
+        clearAllFilters={clearAllFilters}
+        handleCreateTask={handleCreateTask}
+      />
 
-              {/* Tasks View */}
-              <div className="w-full">
-                {viewMode === "kanban" ? (
-                  <div className="space-y-2">
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    {/* Pending Tasks */}
-                    <DroppableColumn 
-                      status="pending"
-                      title="Pending"
-                      icon={<Clock className="h-4 w-4 text-yellow-600" />}
-                      count={pendingTasks.length}
-                    >
-                      <SortableContext items={pendingTasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
-                        {pendingTasks.map((task) => (
-                          <SortableTask key={task.id} task={task} />
-                        ))}
-                      </SortableContext>
-                      {pendingTasks.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">No pending tasks</p>
-                      )}
-                    </DroppableColumn>
+      {/* Main Content */}
+      {viewMode === "kanban" && (
+        <TaskKanbanView
+          pendingTasks={pendingTasks}
+          inProgressTasks={inProgressTasks}
+          completedTasks={completedTasks}
+          activeTask={activeTask}
+          handleDragStart={handleDragStart}
+          handleDragEnd={handleDragEnd}
+          handleEditTask={handleEditTask}
+          handleShareTask={handleShareTask}
+          getPriorityColor={getPriorityColor}
+          formatDate={formatDate}
+          isOverdue={isOverdue}
+        />
+      )}
 
-                    {/* In Progress Tasks */}
-                    <DroppableColumn 
-                      status="in_progress"
-                      title="In Progress"
-                      icon={<AlertCircle className="h-4 w-4 text-blue-600" />}
-                      count={inProgressTasks.length}
-                    >
-                      <SortableContext items={inProgressTasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
-                        {inProgressTasks.map((task) => (
-                          <SortableTask key={task.id} task={task} />
-                        ))}
-                      </SortableContext>
-                      {inProgressTasks.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">No tasks in progress</p>
-                      )}
-                    </DroppableColumn>
-
-                    {/* Completed Tasks */}
-                    <DroppableColumn 
-                      status="completed"
-                      title="Completed"
-                      icon={<CheckCircle className="h-4 w-4 text-green-600" />}
-                      count={completedTasks.length}
-                    >
-                      <SortableContext items={completedTasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
-                        {completedTasks.map((task) => (
-                          <SortableTask key={task.id} task={task} />
-                        ))}
-                      </SortableContext>
-                      {completedTasks.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">No completed tasks</p>
-                      )}
-                    </DroppableColumn>
-                    </div>
-                    
-                    <DragOverlay>
-                      {activeTask ? (
-                        <Card className="p-3 opacity-90 shadow-lg">
-                          <div className="space-y-2">
-                            <div className="flex items-start justify-between">
-                              <h4 className="font-medium text-sm">{activeTask.title}</h4>
-                              <Badge variant={getPriorityColor(activeTask.priority) as any} className="text-xs">
-                                {activeTask.priority}
-                              </Badge>
-                            </div>
-                            {activeTask.description && (
-                              <p className="text-xs text-muted-foreground">{activeTask.description}</p>
-                            )}
-                          </div>
-                        </Card>
-                      ) : null}
-                    </DragOverlay>
-                  </DndContext>
-                  </div>
-                 ) : viewMode === "calendar" ? (
-                   <CalendarView />
-                 ) : (
-                   <div className="space-y-4">
-                   <Table>
-                     <TableHeader>
-                       <TableRow className="border-0 hover:bg-transparent">
-                         <TableHead 
-                           className="cursor-pointer hover:bg-muted/30 transition-colors border-0 text-foreground font-semibold"
-                           onClick={() => handleSort("title")}
-                         >
-                           <div className="flex items-center gap-2">
-                             Task
-                             {getSortIcon("title")}
-                           </div>
-                         </TableHead>
-                         <TableHead 
-                           className="cursor-pointer hover:bg-muted/30 transition-colors border-0 text-foreground font-semibold"
-                           onClick={() => handleSort("priority")}
-                         >
-                           <div className="flex items-center gap-2">
-                             Priority
-                             {getSortIcon("priority")}
-                           </div>
-                         </TableHead>
-                         <TableHead 
-                           className="cursor-pointer hover:bg-muted/30 transition-colors border-0 text-foreground font-semibold"
-                           onClick={() => handleSort("status")}
-                         >
-                           <div className="flex items-center gap-2">
-                             Status
-                             {getSortIcon("status")}
-                           </div>
-                         </TableHead>
-                         <TableHead 
-                           className="cursor-pointer hover:bg-muted/30 transition-colors border-0 text-foreground font-semibold"
-                           onClick={() => handleSort("due_date")}
-                         >
-                           <div className="flex items-center gap-2">
-                             Due Date
-                             {getSortIcon("due_date")}
-                           </div>
-                         </TableHead>
-                         <TableHead className="border-0 text-foreground font-semibold">Actions</TableHead>
-                       </TableRow>
-                     </TableHeader>
-                     <TableBody>
-                       {filteredTasks.length === 0 ? (
-                         <TableRow className="border-0 hover:bg-transparent">
-                           <TableCell colSpan={5} className="text-center py-8 text-muted-foreground border-0">
-                             No tasks assigned to you yet.
-                           </TableCell>
-                         </TableRow>
-                       ) : (
-                         filteredTasks.map((task) => (
-                           <TableRow key={task.id} className="border-b border-border/20 hover:bg-muted/10 transition-colors">
-                             <TableCell className="border-0 text-foreground">
-                               <div>
-                                 <div className="font-medium text-foreground">{task.title}</div>
-                                 {task.description && (
-                                   <div className="text-sm text-muted-foreground">{task.description}</div>
-                                 )}
-                                 {task.attachments && task.attachments.length > 0 && (
-                                   <div className="flex items-center gap-1 mt-1">
-                                     <Paperclip className="h-3 w-3 text-muted-foreground" />
-                                     <span className="text-xs text-muted-foreground">
-                                       {task.attachments.length} attachment(s)
-                                     </span>
-                                   </div>
-                                 )}
-                               </div>
-                             </TableCell>
-                             <TableCell className="border-0">
-                               <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityBadgeStyle(task.priority)}`}>
-                                 {task.priority}
-                               </span>
-                             </TableCell>
-                             <TableCell className="border-0">
-                               <div className="flex items-center gap-2">
-                                 {getStatusIcon(task.status)}
-                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-                                   {task.status.replace('_', ' ')}
-                                 </span>
-                               </div>
-                             </TableCell>
-                             <TableCell className="border-0 text-foreground">
-                               {task.due_date ? (
-                                 <div className="flex items-center gap-1 text-sm">
-                                   <Calendar className="h-3 w-3" />
-                                   {new Date(task.due_date).toLocaleDateString()}
-                                 </div>
-                               ) : (
-                                 <span className="text-muted-foreground">No due date</span>
-                               )}
-                             </TableCell>
-                             <TableCell className="border-0">
-                               <div className="flex gap-2">
-                                 <Select
-                                   value={task.status}
-                                   onValueChange={(value) => handleUpdateStatus(task.id, value)}
-                                 >
-                                   <SelectTrigger className="h-8 text-xs w-32 bg-background border-muted-foreground/30 text-foreground">
-                                     <SelectValue />
-                                   </SelectTrigger>
-                                   <SelectContent>
-                                     <SelectItem value="in_progress">In Progress</SelectItem>
-                                     <SelectItem value="completed">Completed</SelectItem>
-                                     <SelectItem value="cancelled">Cancelled</SelectItem>
-                                   </SelectContent>
-                                 </Select>
-                                 <Button
-                                   variant="outline"
-                                   size="sm"
-                                   onClick={() => handleEditTask(task)}
-                                   className="h-8 px-2"
-                                 >
-                                   <Edit className="h-3 w-3" />
-                                 </Button>
-                                 <Button
-                                   variant="outline"
-                                   size="sm"
-                                   onClick={() => handleShareTask(task)}
-                                   className="h-8 px-2"
-                                   title="Share task with another employee"
-                                 >
-                                   <Share className="h-3 w-3" />
-                                 </Button>
-                                 <Button
-                                   variant="outline"
-                                   size="sm"
-                                   onClick={() => handleDeleteTask(task.id)}
-                                   className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                 >
-                                   <X className="h-3 w-3" />
-                                 </Button>
-                               </div>
-                             </TableCell>
-                           </TableRow>
-                         ))
-                       )}
-                     </TableBody>
-                   </Table>
-                   </div>
-                 )}
-              </div>
-        </div>
-      </div>
-
-      {/* Edit Task Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Edit Task</DialogTitle>
-            <DialogDescription>
-              Update the task details below.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-title">Task Title *</Label>
-              <Input
-                id="edit-title"
-                value={editForm.title}
-                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                placeholder="Enter task title"
-              />
+      {viewMode === "table" && (
+        <>
+          <div className="h-[calc(100vh-360px)] overflow-auto">
+            <TaskTableView
+              filteredTasks={paginatedTasks}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              handleSort={handleSort}
+              handleEditTask={handleEditTask}
+              handleShareTask={handleShareTask}
+              getPriorityColor={getPriorityColor}
+              formatDate={formatDate}
+              isOverdue={isOverdue}
+              onRowClick={(task) => handleTaskClick(task)}
+            />
+          </div>
+          <div className="flex items-center justify-between mt-2 mb-0 pb-0">
+            <div className="text-sm text-muted-foreground">
+              Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} tasks
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-description">Description</Label>
-              <Textarea
-                id="edit-description"
-                value={editForm.description}
-                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                placeholder="Enter task description"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-priority">Priority</Label>
-              <Select
-                value={editForm.priority}
-                onValueChange={(value) => setEditForm({ ...editForm, priority: value })}
+            <div className="flex items-center gap-2">
+              <label htmlFor="rows" className="text-sm">Rows</label>
+              <select
+                id="rows"
+                className="h-8 w-[90px] bg-background border rounded"
+                value={String(pageSize)}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-due-date">Due Date</Label>
-              <Input
-                id="edit-due-date"
-                type="date"
-                value={editForm.due_date}
-                onChange={(e) => setEditForm({ ...editForm, due_date: e.target.value })}
-              />
+                {[10,20,50,100].map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              <Button variant="outline" size="sm" disabled={page===1} onClick={() => setPage(1)}>First</Button>
+              <Button variant="outline" size="sm" disabled={page===1} onClick={() => setPage(p => Math.max(1, p-1))}>Prev</Button>
+              <div className="text-sm">Page {page} of {totalPages}</div>
+              <Button variant="outline" size="sm" disabled={page>=totalPages} onClick={() => setPage(p => p+1)}>Next</Button>
+              <Button variant="outline" size="sm" disabled={page>=totalPages} onClick={() => setPage(totalPages)}>Last</Button>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCancelEdit}>
-              <X className="mr-2 h-4 w-4" />
-              Cancel
-            </Button>
-            <Button onClick={handleSaveEdit}>
-              <Save className="mr-2 h-4 w-4" />
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </>
+      )}
 
-      {/* Create Task Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Create New Task</DialogTitle>
-            <DialogDescription>
-              Assign a new task to an employee.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="create-title">Task Title *</Label>
-              <Input
-                id="create-title"
-                value={createForm.title}
-                onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
-                placeholder="Enter task title"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="create-description">Description</Label>
-              <Textarea
-                id="create-description"
-                value={createForm.description}
-                onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                placeholder="Enter task description"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="create-priority">Priority</Label>
-              <Select
-                value={createForm.priority}
-                onValueChange={(value) => setCreateForm({ ...createForm, priority: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="create-assignee">Assign To *</Label>
-              <Select
-                value={createForm.assignee}
-                onValueChange={(value) => setCreateForm({ ...createForm, assignee: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.whalesync_postgres_id} value={employee.whalesync_postgres_id}>
-                      {employee.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="create-due-date">Due Date</Label>
-              <Input
-                id="create-due-date"
-                type="date"
-                value={createForm.due_date}
-                onChange={(e) => setCreateForm({ ...createForm, due_date: e.target.value })}
-              />
-            </div>
-            
-            {/* File Attachments */}
-            <div className="grid gap-2">
-              <Label>Attachments (Optional)</Label>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="file"
-                    multiple
-                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.xlsx,.xls,.ppt,.pptx"
-                    onChange={(e) => handleFileUpload(e.target.files, setCreateAttachments)}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => document.getElementById('create-file-input')?.click()}
-                    className="gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Upload
-                  </Button>
-                </div>
-                
-                {createAttachments.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Selected Files:</p>
-                    {createAttachments.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
-                        <div className="flex items-center gap-2">
-                          <File className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{file.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                          </span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(index, setCreateAttachments)}
-                          className="h-6 w-6 p-0"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCancelCreate}>
-              <X className="mr-2 h-4 w-4" />
-              Cancel
-            </Button>
-            <Button onClick={handleSaveCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Task
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {viewMode === "calendar" && (
+        <TaskCalendarView
+          currentDate={currentDate}
+          navigateMonth={navigateMonth}
+          getDaysInMonth={getDaysInMonth}
+          getTasksForDate={getTasksForDate}
+          isToday={isToday}
+          isOverdue={isOverdueDate}
+          handleTaskClick={handleTaskClick}
+        />
+      )}
 
-      {/* Share Task Dialog */}
-      <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Share Task</DialogTitle>
-            <DialogDescription>
-              Share this task with another employee. A copy will be created and assigned to them.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="share-assignee">Share With *</Label>
-              <Select
-                value={shareForm.assignee}
-                onValueChange={(value) => setShareForm({ ...shareForm, assignee: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.whalesync_postgres_id} value={employee.whalesync_postgres_id}>
-                      {employee.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="share-message">Message (Optional)</Label>
-              <Textarea
-                id="share-message"
-                value={shareForm.message}
-                onChange={(e) => setShareForm({ ...shareForm, message: e.target.value })}
-                placeholder="Add a message about why you're sharing this task..."
-                rows={3}
-              />
-            </div>
-            
-            {/* File Attachments */}
-            <div className="grid gap-2">
-              <Label>Additional Attachments (Optional)</Label>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="file"
-                    multiple
-                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.xlsx,.xls,.ppt,.pptx"
-                    onChange={(e) => handleFileUpload(e.target.files, setShareAttachments)}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => document.getElementById('share-file-input')?.click()}
-                    className="gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Upload
-                  </Button>
-                </div>
-                
-                {shareAttachments.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Selected Files:</p>
-                    {shareAttachments.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
-                        <div className="flex items-center gap-2">
-                          <File className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{file.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                          </span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(index, setShareAttachments)}
-                          className="h-6 w-6 p-0"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            {sharingTask && (
-              <div className="p-3 bg-muted/50 rounded-lg">
-                <h4 className="font-medium text-sm mb-2">Task Details:</h4>
-                <p className="text-sm text-muted-foreground">
-                  <strong>Title:</strong> {sharingTask.title}
-                </p>
-                {sharingTask.description && (
-                  <p className="text-sm text-muted-foreground">
-                    <strong>Description:</strong> {sharingTask.description}
-                  </p>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  <strong>Priority:</strong> {sharingTask.priority}
-                </p>
-                {sharingTask.due_date && (
-                  <p className="text-sm text-muted-foreground">
-                    <strong>Due Date:</strong> {new Date(sharingTask.due_date).toLocaleDateString()}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCancelShare}>
-              <X className="mr-2 h-4 w-4" />
-              Cancel
-            </Button>
-            <Button onClick={handleSaveShare}>
-              <Share className="mr-2 h-4 w-4" />
-              Share Task
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Modals */}
+      <EditTaskModal
+        isOpen={isEditDialogOpen}
+        onClose={() => setIsEditDialogOpen(false)}
+        editingTask={editingTask}
+        editForm={editForm}
+        setEditForm={setEditForm}
+        editAttachments={editAttachments}
+        setEditAttachments={setEditAttachments}
+        handleSaveEdit={handleSaveEdit}
+        handleCancelEdit={handleCancelEdit}
+        handleFileUpload={handleFileUpload}
+        removeFile={removeFile}
+      />
+
+      <CreateTaskModal
+        isOpen={isCreateDialogOpen}
+        onClose={() => setIsCreateDialogOpen(false)}
+        createForm={createForm}
+        setCreateForm={setCreateForm}
+        createAttachments={createAttachments}
+        setCreateAttachments={setCreateAttachments}
+        employees={employees}
+        handleSaveCreate={handleSaveCreate}
+        handleCancelCreate={handleCancelCreate}
+        handleFileUpload={handleFileUpload}
+        removeFile={removeFile}
+      />
+
+      <ShareTaskModal
+        isOpen={isShareDialogOpen}
+        onClose={() => setIsShareDialogOpen(false)}
+        sharingTask={sharingTask}
+        shareForm={shareForm}
+        setShareForm={setShareForm}
+        shareAttachments={shareAttachments}
+        setShareAttachments={setShareAttachments}
+        employees={employees}
+        handleSaveShare={handleSaveShare}
+        handleCancelShare={handleCancelShare}
+        handleFileUpload={handleFileUpload}
+        removeFile={removeFile}
+      />
+
+      <TaskDetailsModal
+        isOpen={isDetailsOpen}
+        onClose={() => { setIsDetailsOpen(false); setSelectedTask(null); }}
+        task={selectedTask}
+        getPriorityColor={getPriorityColor}
+        formatDate={formatDate}
+        downloadFile={downloadFile}
+      />
     </div>
   );
 }

@@ -4,41 +4,19 @@ import { useState, useEffect } from "react";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { 
-  Plus, 
-  Upload, 
-  FileText, 
-  Image, 
-  Download, 
-  Eye, 
-  Edit, 
-  Trash2, 
-  Users,
-  Calendar,
-  Search,
-  Filter,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Grid3X3,
-  List,
-  GripVertical,
-  Settings,
-  ChevronDown
-} from "lucide-react";
+import { FileText, Image } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+
+// Import components
+import DocumentFilters from "./components/DocumentFilters";
+import DocumentTableView from "./components/DocumentTableView";
+import DocumentKanbanView from "./components/DocumentKanbanView";
+import DocumentPagination from "./components/DocumentPagination";
+import CreateDocumentModal from "./components/CreateDocumentModal";
+import EditDocumentModal from "./components/EditDocumentModal";
+import AssignDocumentModal from "./components/AssignDocumentModal";
+import DocumentDetailsView from "./components/DocumentDetailsView";
 
 interface Document {
   id: string;
@@ -78,6 +56,7 @@ export default function DocumentsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [selectedEmployeesForAssign, setSelectedEmployeesForAssign] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -111,7 +90,8 @@ export default function DocumentsPage() {
     title: "",
     description: "",
     category: "General",
-    status: "Active"
+    status: "Active",
+    newFile: null as File | null
   });
 
   const categories = ["General", "HR", "Finance", "Marketing", "Sales", "Technical", "Legal", "Other"];
@@ -330,13 +310,26 @@ export default function DocumentsPage() {
 
   const handleUpdateDocument = async () => {
     try {
+      let fileUpdate: any = {};
+      if (editDocument.newFile) {
+        const file = editDocument.newFile;
+        const fileUrl = await handleFileUpload(file);
+        fileUpdate = {
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size,
+          file_url: fileUrl
+        };
+      }
+
       const { error } = await supabase
         .from("documents")
         .update({
           title: editDocument.title,
           description: editDocument.description,
           category: editDocument.category,
-          status: editDocument.status
+          status: editDocument.status,
+          ...fileUpdate
         })
         .eq("id", editDocument.id);
 
@@ -344,6 +337,7 @@ export default function DocumentsPage() {
 
       toast.success("Document updated successfully");
       setIsEditDialogOpen(false);
+      setEditDocument(prev => ({ ...prev, newFile: null }));
       loadDocuments();
     } catch (error) {
       console.error("Error updating document:", error);
@@ -404,7 +398,6 @@ export default function DocumentsPage() {
       toast.error("Failed to assign document");
     }
   };
-
 
   const filteredDocuments = documents
     .filter(doc => {
@@ -479,14 +472,53 @@ export default function DocumentsPage() {
     }
   };
 
-  const getSortIcon = (field: string) => {
-    if (sortField !== field) {
-      return <ArrowUpDown className="ml-1.5 h-3.5 w-3.5 opacity-50" />;
-    }
-    return sortDirection === "asc" ? 
-      <ArrowUp className="ml-1.5 h-3.5 w-3.5" /> : 
-      <ArrowDown className="ml-1.5 h-3.5 w-3.5" />;
+  const handleViewDocument = (document: Document) => {
+    // Keep action button behavior (open file)
+    window.open(document.file_url, '_blank');
   };
+
+  const handleRowClick = (document: Document) => {
+    setSelectedDocument(document);
+    setIsDetailsOpen(true);
+  };
+
+  const handleEditDocument = (document: Document) => {
+    setEditDocument({
+      id: document.id,
+      title: document.title,
+      description: document.description || "",
+      category: document.category,
+      status: document.status,
+      newFile: null
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleAssignDocumentClick = (document: Document) => {
+    setSelectedDocument(document);
+    setIsAssignDialogOpen(true);
+  };
+
+  if (loading) {
+    return (
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <SiteHeader title="Documents" />
+          <div className="flex flex-1 flex-col">
+            <div className="flex-1 overflow-auto p-6">
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-lg text-muted-foreground">Loading documents...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    );
+  }
 
   return (
     <SidebarProvider>
@@ -499,817 +531,111 @@ export default function DocumentsPage() {
           {/* Main Content */}
           <div className="flex flex-col overflow-hidden flex-1">
             {/* Action Bar - Fixed */}
-            <div className="flex flex-col gap-3 px-4 pt-4 pb-3 flex-shrink-0">
-              {/* Search + Primary Actions */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <Input
-                  placeholder="Search documents..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1 min-w-[300px] h-10"
-                />
-
-                <div className="flex gap-2 items-center">
-                  {/* Add Document */}
-                  <Button onClick={() => setIsCreateDialogOpen(true)} className="h-10">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Document
-                  </Button>
-
-                  {/* Category Filter */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-40 h-10 justify-between">
-                        {categoryFilter.length === 0 ? "All Categories" : 
-                         categoryFilter.length === 1 ? categoryFilter[0] : 
-                         `${categoryFilter.length} Categories`}
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56">
-                      <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
-                        Select Categories
-                      </div>
-                      <div className="space-y-1">
-                        {categories.map(category => (
-                          <div key={category} className="flex items-center space-x-2 px-2 py-1.5">
-                            <Checkbox
-                              id={`category-${category}`}
-                              checked={categoryFilter.includes(category)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setCategoryFilter(prev => [...prev, category]);
-                                } else {
-                                  setCategoryFilter(prev => prev.filter(c => c !== category));
-                                }
-                              }}
-                            />
-                            <Label htmlFor={`category-${category}`} className="text-sm cursor-pointer">
-                              {category}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  {/* Status Filter */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-40 h-10 justify-between">
-                        {statusFilter.length === 0 ? "All Status" : 
-                         statusFilter.length === 1 ? statusFilter[0] : 
-                         `${statusFilter.length} Status`}
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56">
-                      <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
-                        Select Status
-                      </div>
-                      <div className="space-y-1">
-                        {["Active", "Archived", "Deleted"].map(status => (
-                          <div key={status} className="flex items-center space-x-2 px-2 py-1.5">
-                            <Checkbox
-                              id={`status-${status}`}
-                              checked={statusFilter.includes(status)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setStatusFilter(prev => [...prev, status]);
-                                } else {
-                                  setStatusFilter(prev => prev.filter(s => s !== status));
-                                }
-                              }}
-                            />
-                            <Label htmlFor={`status-${status}`} className="text-sm cursor-pointer">
-                              {status}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  {/* View Toggle Buttons */}
-                  <div className="flex items-center gap-1 border rounded-md p-1">
-                    <Button
-                      variant={!showKanban ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setShowKanban(false)}
-                      className="h-8 w-8 p-0"
-                      title="Table View"
-                    >
-                      <List className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant={showKanban ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setShowKanban(true)}
-                      className="h-8 w-8 p-0"
-                      title="Kanban View"
-                    >
-                      <Grid3X3 className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  {/* Customize Columns Dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-10">
-                        <Settings className="h-4 w-4 mr-2" />
-                        Customize Columns
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                      <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
-                        Show/Hide Columns
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2 px-2 py-1.5">
-                          <Checkbox
-                            id="dropdown-document"
-                            checked={visibleColumns.document}
-                            onCheckedChange={(checked) => 
-                              setVisibleColumns(prev => ({ ...prev, document: !!checked }))
-                            }
-                          />
-                          <Label htmlFor="dropdown-document" className="text-sm cursor-pointer">Document</Label>
-                        </div>
-                        <div className="flex items-center space-x-2 px-2 py-1.5">
-                          <Checkbox
-                            id="dropdown-category"
-                            checked={visibleColumns.category}
-                            onCheckedChange={(checked) => 
-                              setVisibleColumns(prev => ({ ...prev, category: !!checked }))
-                            }
-                          />
-                          <Label htmlFor="dropdown-category" className="text-sm cursor-pointer">Category</Label>
-                        </div>
-                        <div className="flex items-center space-x-2 px-2 py-1.5">
-                          <Checkbox
-                            id="dropdown-file-info"
-                            checked={visibleColumns.fileInfo}
-                            onCheckedChange={(checked) => 
-                              setVisibleColumns(prev => ({ ...prev, fileInfo: !!checked }))
-                            }
-                          />
-                          <Label htmlFor="dropdown-file-info" className="text-sm cursor-pointer">File Info</Label>
-                        </div>
-                        <div className="flex items-center space-x-2 px-2 py-1.5">
-                          <Checkbox
-                            id="dropdown-assigned-to"
-                            checked={visibleColumns.assignedTo}
-                            onCheckedChange={(checked) => 
-                              setVisibleColumns(prev => ({ ...prev, assignedTo: !!checked }))
-                            }
-                          />
-                          <Label htmlFor="dropdown-assigned-to" className="text-sm cursor-pointer">Assigned To</Label>
-                        </div>
-                        <div className="flex items-center space-x-2 px-2 py-1.5">
-                          <Checkbox
-                            id="dropdown-status"
-                            checked={visibleColumns.status}
-                            onCheckedChange={(checked) => 
-                              setVisibleColumns(prev => ({ ...prev, status: !!checked }))
-                            }
-                          />
-                          <Label htmlFor="dropdown-status" className="text-sm cursor-pointer">Status</Label>
-                        </div>
-                        <div className="flex items-center space-x-2 px-2 py-1.5">
-                          <Checkbox
-                            id="dropdown-created"
-                            checked={visibleColumns.created}
-                            onCheckedChange={(checked) => 
-                              setVisibleColumns(prev => ({ ...prev, created: !!checked }))
-                            }
-                          />
-                          <Label htmlFor="dropdown-created" className="text-sm cursor-pointer">Created</Label>
-                        </div>
-                        <div className="flex items-center space-x-2 px-2 py-1.5">
-                          <Checkbox
-                            id="dropdown-actions"
-                            checked={visibleColumns.actions}
-                            onCheckedChange={(checked) => 
-                              setVisibleColumns(prev => ({ ...prev, actions: !!checked }))
-                            }
-                          />
-                          <Label htmlFor="dropdown-actions" className="text-sm cursor-pointer">Actions</Label>
-                        </div>
-                      </div>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-            </div>
+            <DocumentFilters
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              categoryFilter={categoryFilter}
+              setCategoryFilter={setCategoryFilter}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              showKanban={showKanban}
+              setShowKanban={setShowKanban}
+              visibleColumns={visibleColumns}
+              setVisibleColumns={setVisibleColumns}
+              onAddDocument={() => setIsCreateDialogOpen(true)}
+              categories={categories}
+            />
 
             {/* Table or Kanban Container - Scrollable */}
             <div className="flex-1 overflow-y-auto px-4 min-h-0">
               {showKanban ? (
-                <div className="h-full overflow-auto">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {paginatedDocuments.map(doc => (
-                      <Card key={doc.id} className="hover:shadow-md transition-shadow">
-                        <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              {getFileIcon(doc.file_type)}
-                              <div className="flex-1 min-w-0">
-                                <CardTitle className="text-sm font-semibold truncate">
-                                  {doc.title}
-                                </CardTitle>
-                                <CardDescription className="text-xs text-muted-foreground">
-                                  {doc.file_name}
-                                </CardDescription>
-                              </div>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {doc.category}
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="pt-0">
-                          {doc.description && (
-                            <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
-                              {doc.description}
-                            </p>
-                          )}
-                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-                            <span>{formatFileSize(doc.file_size)}</span>
-                            <span>{new Date(doc.created_at).toLocaleDateString()}</span>
-                          </div>
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-1">
-                              <Users className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-xs">{doc.assignments?.length || 0} assigned</span>
-                            </div>
-                            <Badge className={`${getStatusColor(doc.status)} text-white text-xs`}>
-                              {doc.status}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(doc.file_url, '_blank')}
-                              className="flex-1 h-7 text-xs"
-                            >
-                              <Eye className="h-3 w-3 mr-1" />
-                              View
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setEditDocument({
-                                  id: doc.id,
-                                  title: doc.title,
-                                  description: doc.description || "",
-                                  category: doc.category,
-                                  status: doc.status
-                                });
-                                setIsEditDialogOpen(true);
-                              }}
-                              className="flex-1 h-7 text-xs"
-                            >
-                              <Edit className="h-3 w-3 mr-1" />
-                              Edit
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedDocument(doc);
-                                setIsAssignDialogOpen(true);
-                              }}
-                              className="h-7 w-7 p-0"
-                              title="Assign Document"
-                            >
-                              <Users className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteDocument(doc.id)}
-                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                              title="Delete Document"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
+                <DocumentKanbanView
+                  documents={paginatedDocuments}
+                  onViewDocument={handleViewDocument}
+                  onEditDocument={handleEditDocument}
+                  onAssignDocument={handleAssignDocumentClick}
+                  onDeleteDocument={handleDeleteDocument}
+                  formatFileSize={formatFileSize}
+                  getFileIcon={getFileIcon}
+                  getStatusColor={getStatusColor}
+                />
               ) : (
-                // Table View
-                <div className="w-full rounded-md border overflow-hidden">
-                  <Table className="table-fixed w-full">
-                    <colgroup>
-                      <col className="w-[200px]" />
-                      <col className="w-[120px]" />
-                      <col className="w-[180px]" />
-                      <col className="w-[120px]" />
-                      <col className="w-[100px]" />
-                      <col className="w-[120px]" />
-                      <col className="w-[120px]" />
-                    </colgroup>
-                    <TableHeader className="sticky top-0 bg-background z-10">
-                      <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        {visibleColumns.document && (
-                          <TableHead className="text-xs font-semibold text-foreground px-3 py-3">
-                            <Button
-                              variant="ghost"
-                              onClick={() => handleSort("title")}
-                              className="h-7 px-2 hover:bg-transparent text-xs font-semibold"
-                            >
-                              Document
-                              {getSortIcon("title")}
-                            </Button>
-                          </TableHead>
-                        )}
-                        {visibleColumns.category && (
-                          <TableHead className="text-xs font-semibold text-foreground px-3 py-3">
-                            <Button
-                              variant="ghost"
-                              onClick={() => handleSort("category")}
-                              className="h-7 px-2 hover:bg-transparent text-xs font-semibold"
-                            >
-                              Category
-                              {getSortIcon("category")}
-                            </Button>
-                          </TableHead>
-                        )}
-                        {visibleColumns.fileInfo && (
-                          <TableHead className="text-xs font-semibold text-foreground px-3 py-3">
-                            <Button
-                              variant="ghost"
-                              onClick={() => handleSort("file_name")}
-                              className="h-7 px-2 hover:bg-transparent text-xs font-semibold"
-                            >
-                              File Info
-                              {getSortIcon("file_name")}
-                            </Button>
-                          </TableHead>
-                        )}
-                        {visibleColumns.assignedTo && (
-                          <TableHead className="text-xs font-semibold text-foreground px-3 py-3">
-                            <Button
-                              variant="ghost"
-                              onClick={() => handleSort("assignments")}
-                              className="h-7 px-2 hover:bg-transparent text-xs font-semibold"
-                            >
-                              Assigned To
-                              {getSortIcon("assignments")}
-                            </Button>
-                          </TableHead>
-                        )}
-                        {visibleColumns.status && (
-                          <TableHead className="text-xs font-semibold text-foreground px-3 py-3">
-                            <Button
-                              variant="ghost"
-                              onClick={() => handleSort("status")}
-                              className="h-7 px-2 hover:bg-transparent text-xs font-semibold"
-                            >
-                              Status
-                              {getSortIcon("status")}
-                            </Button>
-                          </TableHead>
-                        )}
-                        {visibleColumns.created && (
-                          <TableHead className="text-xs font-semibold text-foreground px-3 py-3">
-                            <Button
-                              variant="ghost"
-                              onClick={() => handleSort("created_at")}
-                              className="h-7 px-2 hover:bg-transparent text-xs font-semibold"
-                            >
-                              Created
-                              {getSortIcon("created_at")}
-                            </Button>
-                          </TableHead>
-                        )}
-                        {visibleColumns.actions && (
-                          <TableHead className="text-xs font-semibold text-foreground px-3 py-3">Actions</TableHead>
-                        )}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {paginatedDocuments.length > 0 ? (
-                        paginatedDocuments.map(doc => (
-                          <TableRow 
-                            key={doc.id} 
-                            className="border-b border-border hover:bg-muted/30 transition-colors"
-                          >
-                            {visibleColumns.document && (
-                              <TableCell className="py-3 px-3">
-                                <div className="flex items-center gap-3">
-                                  {getFileIcon(doc.file_type)}
-                                  <div>
-                                    <div className="font-semibold text-sm">{doc.title}</div>
-                                    <div className="text-xs text-muted-foreground truncate" title={doc.description || "No description"}>
-                                      {doc.description || "No description"}
-                                    </div>
-                                  </div>
-                                </div>
-                              </TableCell>
-                            )}
-                            {visibleColumns.category && (
-                              <TableCell className="py-3 px-3">
-                                <Badge variant="outline" className="text-xs">
-                                  {doc.category}
-                                </Badge>
-                              </TableCell>
-                            )}
-                            {visibleColumns.fileInfo && (
-                              <TableCell className="py-3 px-3">
-                                <div className="text-sm">
-                                  <div className="font-medium truncate" title={doc.file_name}>{doc.file_name}</div>
-                                  <div className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)}</div>
-                                </div>
-                              </TableCell>
-                            )}
-                            {visibleColumns.assignedTo && (
-                              <TableCell className="py-3 px-3">
-                                <div className="flex items-center gap-1">
-                                  <Users className="h-3 w-3 text-muted-foreground" />
-                                  <span className="text-sm">{doc.assignments?.length || 0} employees</span>
-                                </div>
-                              </TableCell>
-                            )}
-                            {visibleColumns.status && (
-                              <TableCell className="py-3 px-3">
-                                <Badge className={`${getStatusColor(doc.status)} text-white text-xs`}>
-                                  {doc.status}
-                                </Badge>
-                              </TableCell>
-                            )}
-                            {visibleColumns.created && (
-                              <TableCell className="py-3 px-3">
-                                <div className="text-sm">{new Date(doc.created_at).toLocaleDateString()}</div>
-                              </TableCell>
-                            )}
-                            {visibleColumns.actions && (
-                              <TableCell className="py-3 px-3">
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => window.open(doc.file_url, '_blank')}
-                                    className="h-7 w-7 p-0"
-                                    title="View Document"
-                                  >
-                                    <Eye className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEditDocument({
-                                        id: doc.id,
-                                        title: doc.title,
-                                        description: doc.description || "",
-                                        category: doc.category,
-                                        status: doc.status
-                                      });
-                                      setIsEditDialogOpen(true);
-                                    }}
-                                    className="h-7 w-7 p-0"
-                                    title="Edit Document"
-                                  >
-                                    <Edit className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedDocument(doc);
-                                      setIsAssignDialogOpen(true);
-                                    }}
-                                    className="h-7 w-7 p-0"
-                                    title="Assign Document"
-                                  >
-                                    <Users className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDeleteDocument(doc.id)}
-                                    className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    title="Delete Document"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            )}
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center py-16">
-                            <div className="text-center">
-                              <h3 className="text-lg font-semibold text-foreground">No Documents Found</h3>
-                              <p className="text-muted-foreground mt-1">Try adjusting your filters or resetting the view.</p>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                <DocumentTableView
+                  documents={paginatedDocuments}
+                  visibleColumns={visibleColumns}
+                  sortField={sortField}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  onViewDocument={handleViewDocument}
+                  onEditDocument={handleEditDocument}
+                  onAssignDocument={handleAssignDocumentClick}
+                  onDeleteDocument={handleDeleteDocument}
+                  formatFileSize={formatFileSize}
+                  getFileIcon={getFileIcon}
+                  getStatusColor={getStatusColor}
+                  onRowClick={handleRowClick}
+                />
               )}
             </div>
 
             {/* Pagination - Fixed at Bottom */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-3 border-t border-border bg-muted/20 px-4 flex-shrink-0">
-              <div className="text-sm text-muted-foreground">
-                {totalCount > 0 ? (
-                  <>
-                    Showing <span className="font-medium text-foreground">{pageIndex * pageSize + 1}</span> to{" "}
-                    <span className="font-medium text-foreground">{Math.min((pageIndex + 1) * pageSize, totalCount)}</span> of{" "}
-                    <span className="font-medium text-foreground">{totalCount}</span> documents
-                  </>
-                ) : (
-                  "No documents found"
-                )}
-              </div>
-              
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Rows per page</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setPageIndex(0);
-                    }}
-                    className="h-9 w-20 rounded-md border border-input bg-background text-sm font-medium px-3 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                  >
-                    {[10, 20, 50, 100].map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">
-                    Page <span className="font-medium text-foreground">{pageIndex + 1}</span> of <span className="font-medium text-foreground">{totalPages || 1}</span>
-                  </span>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={pageIndex === 0}
-                      onClick={() => setPageIndex(0)}
-                      className="hidden sm:inline-flex h-9"
-                    >
-                      First
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={pageIndex === 0}
-                      onClick={() => setPageIndex((prev) => Math.max(prev - 1, 0))}
-                      className="h-9"
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={(pageIndex + 1) * pageSize >= totalCount}
-                      onClick={() => setPageIndex((prev) => prev + 1)}
-                      className="h-9"
-                    >
-                      Next
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={(pageIndex + 1) * pageSize >= totalCount}
-                      onClick={() => setPageIndex(totalPages - 1)}
-                      className="hidden sm:inline-flex h-9"
-                    >
-                      Last
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <DocumentPagination
+              totalCount={totalCount}
+              pageIndex={pageIndex}
+              pageSize={pageSize}
+              totalPages={totalPages}
+              onPageChange={setPageIndex}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPageIndex(0);
+              }}
+            />
           </div>
         </div>
 
         {/* Create Document Dialog */}
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Create New Document</DialogTitle>
-              <DialogDescription>
-                Upload a document and assign it to specific employees.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="title">Title *</Label>
-                <Input
-                  id="title"
-                  value={newDocument.title}
-                  onChange={(e) => setNewDocument({ ...newDocument, title: e.target.value })}
-                  placeholder="Enter document title"
-                />
-              </div>
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={newDocument.description}
-                  onChange={(e) => setNewDocument({ ...newDocument, description: e.target.value })}
-                  placeholder="Enter document description"
-                />
-              </div>
-              <div>
-                <Label htmlFor="category">Category</Label>
-                <Select value={newDocument.category} onValueChange={(value) => setNewDocument({ ...newDocument, category: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(category => (
-                      <SelectItem key={category} value={category}>{category}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="file">File *</Label>
-                <Input
-                  id="file"
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx"
-                  onChange={(e) => setNewDocument({ ...newDocument, file: e.target.files?.[0] || null })}
-                />
-              </div>
-              <div>
-                <Label>Assign to Employees</Label>
-                <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-3">
-                  {employees.map(employee => (
-                    <div key={employee.whalesync_postgres_id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={employee.whalesync_postgres_id}
-                        checked={newDocument.selectedEmployees.includes(employee.whalesync_postgres_id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setNewDocument({
-                              ...newDocument,
-                              selectedEmployees: [...newDocument.selectedEmployees, employee.whalesync_postgres_id]
-                            });
-                          } else {
-                            setNewDocument({
-                              ...newDocument,
-                              selectedEmployees: newDocument.selectedEmployees.filter(id => id !== employee.whalesync_postgres_id)
-                            });
-                          }
-                        }}
-                      />
-                      <Label htmlFor={employee.whalesync_postgres_id} className="text-sm">
-                        {employee.full_name}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleCreateDocument}>
-                Create Document
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <CreateDocumentModal
+          isOpen={isCreateDialogOpen}
+          onClose={() => setIsCreateDialogOpen(false)}
+          onSubmit={handleCreateDocument}
+          newDocument={newDocument}
+          setNewDocument={setNewDocument}
+          employees={employees}
+          categories={categories}
+        />
 
         {/* Edit Document Dialog */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Edit Document</DialogTitle>
-              <DialogDescription>
-                Update document information.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="edit-title">Title *</Label>
-                <Input
-                  id="edit-title"
-                  value={editDocument.title}
-                  onChange={(e) => setEditDocument({ ...editDocument, title: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-description">Description</Label>
-                <Textarea
-                  id="edit-description"
-                  value={editDocument.description}
-                  onChange={(e) => setEditDocument({ ...editDocument, description: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-category">Category</Label>
-                <Select value={editDocument.category} onValueChange={(value) => setEditDocument({ ...editDocument, category: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(category => (
-                      <SelectItem key={category} value={category}>{category}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit-status">Status</Label>
-                <Select value={editDocument.status} onValueChange={(value) => setEditDocument({ ...editDocument, status: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Archived">Archived</SelectItem>
-                    <SelectItem value="Deleted">Deleted</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleUpdateDocument}>
-                Update Document
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <EditDocumentModal
+          isOpen={isEditDialogOpen}
+          onClose={() => setIsEditDialogOpen(false)}
+          onSubmit={handleUpdateDocument}
+          editDocument={editDocument}
+          setEditDocument={setEditDocument}
+          categories={categories}
+        />
 
         {/* Assign Document Dialog */}
-        <Dialog open={isAssignDialogOpen} onOpenChange={(open) => {
-          setIsAssignDialogOpen(open);
-          if (!open) {
+        <AssignDocumentModal
+          isOpen={isAssignDialogOpen}
+          onClose={() => {
+            setIsAssignDialogOpen(false);
             setSelectedDocument(null);
             setSelectedEmployeesForAssign([]);
-          }
-        }}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Assign Document</DialogTitle>
-              <DialogDescription>
-                Select employees who can access this document.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-3">
-                {employees.map(employee => (
-                  <div key={employee.whalesync_postgres_id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`assign-${employee.whalesync_postgres_id}`}
-                      checked={selectedEmployeesForAssign.includes(employee.whalesync_postgres_id)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedEmployeesForAssign(prev => [...prev, employee.whalesync_postgres_id]);
-                        } else {
-                          setSelectedEmployeesForAssign(prev => prev.filter(id => id !== employee.whalesync_postgres_id));
-                        }
-                      }}
-                    />
-                    <Label htmlFor={`assign-${employee.whalesync_postgres_id}`} className="text-sm">
-                      {employee.full_name}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                setIsAssignDialogOpen(false);
-                setSelectedDocument(null);
-                setSelectedEmployeesForAssign([]);
-              }}>
-                Cancel
-              </Button>
-              <Button onClick={handleAssignDocument}>
-                Save Assignments
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-
+          }}
+          onSubmit={handleAssignDocument}
+          selectedDocument={selectedDocument}
+          selectedEmployees={selectedEmployeesForAssign}
+          setSelectedEmployees={setSelectedEmployeesForAssign}
+          employees={employees}
+        />
       </SidebarInset>
+
+      {/* Document Details View */}
+      <DocumentDetailsView
+        isOpen={isDetailsOpen}
+        onClose={() => { setIsDetailsOpen(false); setSelectedDocument(null); }}
+        document={selectedDocument as any}
+      />
     </SidebarProvider>
   );
 }

@@ -1,40 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent } from "@/components/ui/card";
 import { 
   Key, 
-  Eye, 
-  EyeOff, 
-  Copy, 
-  ExternalLink, 
-  Search,
-  Filter,
-  Calendar,
-  DollarSign,
-  Users,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  XCircle,
-  Pause,
-  Grid3X3,
-  List,
-  Settings,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown
+  Clock, 
+  CheckCircle, 
+  AlertCircle, 
+  XCircle, 
+  Pause 
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+
+// Import components
+import SubscriptionStatisticsCards from "./components/SubscriptionStatisticsCards";
+import SubscriptionFilters from "./components/SubscriptionFilters";
+import SubscriptionGridView from "./components/SubscriptionGridView";
+import SubscriptionTableView from "./components/SubscriptionTableView";
+import SubscriptionDetailsModal from "./components/SubscriptionDetailsModal";
 
 interface Subscription {
   id: string;
@@ -397,590 +381,62 @@ export default function EmployeeSubscriptionsPage() {
     );
   }
 
+  const stats = {
+    total: subscriptions.length,
+    active: activeSubscriptions.length,
+    renewalsSoon: renewalsSoon
+  };
+
   return (
     <div className="space-y-6 px-2">
-      {/* Stats Cards */}
-      <div className="pt-2">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="bg-gradient-to-t from-primary/5 to-card shadow-xs">
-            <CardHeader className="pb-2">
-              <CardDescription>Total Subscriptions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">{subscriptions.length}</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-t from-primary/5 to-card shadow-xs">
-            <CardHeader className="pb-2">
-              <CardDescription>Active Subscriptions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{activeSubscriptions.length}</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-t from-primary/5 to-card shadow-xs">
-            <CardHeader className="pb-2">
-              <CardDescription>Renewals in Next 30 Days</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{renewalsSoon}</div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      {/* Statistics Cards */}
+      <SubscriptionStatisticsCards stats={stats} />
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search subscriptions..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </div>
-        {/* Status Filter - Multi-selector */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="w-full sm:w-40 justify-start text-left font-normal text-sm">
-              <Filter className="mr-2 h-4 w-4" />
-              {statusFilter.length === 0 ? "All Status" : `${statusFilter.length} selected`}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-0" align="start">
-            <div className="p-3 border-b">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Filter by Status</span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setStatusFilter(["Active", "Paused", "Inactive", "Cancelled"])}
-                    className="h-6 px-2 text-xs"
-                  >
-                    Select All
-                  </Button>
-                  {statusFilter.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setStatusFilter([])}
-                      className="h-6 px-2 text-xs"
-                    >
-                      Clear All
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="p-2 space-y-2">
-              {["Active", "Paused", "Inactive", "Cancelled"].map((status) => (
-                <div key={status} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`status-${status}`}
-                    checked={statusFilter.includes(status)}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setStatusFilter(prev => [...prev, status]);
-                      } else {
-                        setStatusFilter(prev => prev.filter(s => s !== status));
-                      }
-                    }}
-                  />
-                  <label
-                    htmlFor={`status-${status}`}
-                    className="text-sm cursor-pointer flex-1"
-                  >
-                    {status}
-                  </label>
-                </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* Category Filter - Multi-selector */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="w-full sm:w-40 justify-start text-left font-normal text-sm">
-              <Filter className="mr-2 h-4 w-4" />
-              {categoryFilter.length === 0 ? "All Categories" : `${categoryFilter.length} selected`}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-0" align="start">
-            <div className="p-3 border-b">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Filter by Category</span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setCategoryFilter(["SaaS", "Marketing", "Cloud", "Productivity", "Security", "Finance", "Communication", "Other"])}
-                    className="h-6 px-2 text-xs"
-                  >
-                    Select All
-                  </Button>
-                  {categoryFilter.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setCategoryFilter([])}
-                      className="h-6 px-2 text-xs"
-                    >
-                      Clear All
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="p-2 space-y-2">
-              {["SaaS", "Marketing", "Cloud", "Productivity", "Security", "Finance", "Communication", "Other"].map((category) => (
-                <div key={category} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`category-${category}`}
-                    checked={categoryFilter.includes(category)}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setCategoryFilter(prev => [...prev, category]);
-                      } else {
-                        setCategoryFilter(prev => prev.filter(c => c !== category));
-                      }
-                    }}
-                  />
-                  <label
-                    htmlFor={`category-${category}`}
-                    className="text-sm cursor-pointer flex-1"
-                  >
-                    {category}
-                  </label>
-                </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-        
-        {/* Clear All Filters Button */}
-        {(statusFilter.length > 0 || categoryFilter.length > 0) && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setStatusFilter([]);
-              setCategoryFilter([]);
-            }}
-            className="text-xs"
-          >
-            Clear All Filters
-          </Button>
-        )}
-        
-        <div className="flex items-center gap-2">
-          <Button
-            variant={viewMode === 'grid' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('grid')}
-          >
-            <Grid3X3 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'table' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('table')}
-          >
-            <List className="h-4 w-4" />
-          </Button>
-          {viewMode === 'table' && (
-            <Popover open={showColumnPopover} onOpenChange={setShowColumnPopover}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Columns
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-56" align="end">
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="subscription"
-                        checked={visibleColumns.subscription}
-                        onCheckedChange={() => toggleColumn("subscription")}
-                      />
-                      <label htmlFor="subscription" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        Subscription
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="vendor"
-                        checked={visibleColumns.vendor}
-                        onCheckedChange={() => toggleColumn("vendor")}
-                      />
-                      <label htmlFor="vendor" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        Vendor
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="status"
-                        checked={visibleColumns.status}
-                        onCheckedChange={() => toggleColumn("status")}
-                      />
-                      <label htmlFor="status" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        Status
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="category"
-                        checked={visibleColumns.category}
-                        onCheckedChange={() => toggleColumn("category")}
-                      />
-                      <label htmlFor="category" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        Category
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="plan"
-                        checked={visibleColumns.plan}
-                        onCheckedChange={() => toggleColumn("plan")}
-                      />
-                      <label htmlFor="plan" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        Plan
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="billing"
-                        checked={visibleColumns.billing}
-                        onCheckedChange={() => toggleColumn("billing")}
-                      />
-                      <label htmlFor="billing" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        Billing
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="expires"
-                        checked={visibleColumns.expires}
-                        onCheckedChange={() => toggleColumn("expires")}
-                      />
-                      <label htmlFor="expires" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        Expires
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="actions"
-                        checked={visibleColumns.actions}
-                        onCheckedChange={() => toggleColumn("actions")}
-                      />
-                      <label htmlFor="actions" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        Actions
-                      </label>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={resetColumns} className="w-full">
-                    Reset All
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-          )}
-        </div>
-      </div>
+      <SubscriptionFilters
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        categoryFilter={categoryFilter}
+        setCategoryFilter={setCategoryFilter}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        showColumnPopover={showColumnPopover}
+        setShowColumnPopover={setShowColumnPopover}
+        visibleColumns={visibleColumns}
+        toggleColumn={toggleColumn}
+        resetColumns={resetColumns}
+      />
 
       {/* Subscriptions List */}
       {filteredSubscriptions.length > 0 ? (
         viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredSubscriptions.map((subscription) => (
-            <Card key={subscription.id} className="relative">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg font-semibold">{subscription.subscription_name}</CardTitle>
-                    <CardDescription className="text-sm">
-                      {subscription.vendor?.full_name || 'N/A'}
-                    </CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {getStatusIcon(subscription.status)}
-                    <Badge className={`${getStatusColor(subscription.status)} text-white text-xs`}>
-                      {subscription.status}
-                    </Badge>
-                  </div>
-                </div>
-                {subscription.category && (
-                  <Badge variant="outline" className="w-fit text-xs">
-                    {subscription.category}
-                  </Badge>
-                )}
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                {/* Subscription Details */}
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Plan:</span>
-                    <span className="font-medium">{subscription.plan_tier || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Billing:</span>
-                    <span className="font-medium">
-                      {formatCurrency(subscription.cost_per_period)} / {subscription.billing_cycle}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Expires:</span>
-                    <span className="font-medium">{formatDate(subscription.expiry_date)}</span>
-                  </div>
-                  {getDaysUntilExpiry(subscription.expiry_date) <= 30 && getDaysUntilExpiry(subscription.expiry_date) >= 0 && (
-                    <div className="flex justify-between text-orange-600">
-                      <span className="text-muted-foreground">Days Left:</span>
-                      <span className="font-medium">{getDaysUntilExpiry(subscription.expiry_date)} days</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Credentials Section */}
-                {subscription.credentials && (
-                  <div className="border-t pt-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Key className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-medium">Credentials</span>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      {subscription.credentials.email && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground w-12">Email:</span>
-                          <span className="text-xs font-mono flex-1 truncate">{subscription.credentials.email}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyToClipboard(subscription.credentials.email, "Email")}
-                            className="h-6 w-6 p-0"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      )}
-                      
-                      {subscription.credentials.password && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground w-12">Password:</span>
-                          <span className="text-xs font-mono flex-1 truncate">
-                            {showCredentials[subscription.id] ? subscription.credentials.password : '••••••••'}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => togglePasswordVisibility(subscription.id)}
-                            className="h-6 w-6 p-0"
-                          >
-                            {showCredentials[subscription.id] ? (
-                              <EyeOff className="h-3 w-3" />
-                            ) : (
-                              <Eye className="h-3 w-3" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyToClipboard(subscription.credentials.password, "Password")}
-                            className="h-6 w-6 p-0"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedSubscription(subscription)}
-                    className="flex-1"
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    View Details
-                  </Button>
-                  {subscription.portal_url && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(subscription.portal_url, '_blank')}
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          </div>
+          <SubscriptionGridView
+            subscriptions={sortedSubscriptions}
+            onViewSubscription={setSelectedSubscription}
+            showCredentials={showCredentials}
+            onTogglePasswordVisibility={togglePasswordVisibility}
+            onCopyToClipboard={copyToClipboard}
+            formatCurrency={formatCurrency}
+            formatDate={formatDate}
+            getDaysUntilExpiry={getDaysUntilExpiry}
+            getStatusColor={getStatusColor}
+            getStatusIcon={getStatusIcon}
+          />
         ) : (
-          // Table View
-          <div className="border rounded-lg">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {visibleColumns.subscription && (
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleSort("subscription")}
-                    >
-                      <div className="flex items-center gap-2">
-                        Subscription
-                        {getSortIcon("subscription")}
-                      </div>
-                    </TableHead>
-                  )}
-                  {visibleColumns.vendor && (
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleSort("vendor")}
-                    >
-                      <div className="flex items-center gap-2">
-                        Vendor
-                        {getSortIcon("vendor")}
-                      </div>
-                    </TableHead>
-                  )}
-                  {visibleColumns.status && (
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleSort("status")}
-                    >
-                      <div className="flex items-center gap-2">
-                        Status
-                        {getSortIcon("status")}
-                      </div>
-                    </TableHead>
-                  )}
-                  {visibleColumns.category && (
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleSort("category")}
-                    >
-                      <div className="flex items-center gap-2">
-                        Category
-                        {getSortIcon("category")}
-                      </div>
-                    </TableHead>
-                  )}
-                  {visibleColumns.plan && (
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleSort("plan")}
-                    >
-                      <div className="flex items-center gap-2">
-                        Plan
-                        {getSortIcon("plan")}
-                      </div>
-                    </TableHead>
-                  )}
-                  {visibleColumns.billing && (
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleSort("billing")}
-                    >
-                      <div className="flex items-center gap-2">
-                        Billing
-                        {getSortIcon("billing")}
-                      </div>
-                    </TableHead>
-                  )}
-                  {visibleColumns.expires && (
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleSort("expires")}
-                    >
-                      <div className="flex items-center gap-2">
-                        Expires
-                        {getSortIcon("expires")}
-                      </div>
-                    </TableHead>
-                  )}
-                  {visibleColumns.actions && <TableHead>Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedSubscriptions.map((subscription) => (
-                  <TableRow key={subscription.id}>
-                    {visibleColumns.subscription && (
-                      <TableCell className="font-medium">{subscription.subscription_name}</TableCell>
-                    )}
-                    {visibleColumns.vendor && (
-                      <TableCell>{subscription.vendor?.full_name || 'N/A'}</TableCell>
-                    )}
-                    {visibleColumns.status && (
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(subscription.status)}
-                          <Badge className={`${getStatusColor(subscription.status)} text-white text-xs`}>
-                            {subscription.status}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                    )}
-                    {visibleColumns.category && (
-                      <TableCell>
-                        {subscription.category && (
-                          <Badge variant="outline" className="text-xs">
-                            {subscription.category}
-                          </Badge>
-                        )}
-                      </TableCell>
-                    )}
-                    {visibleColumns.plan && (
-                      <TableCell>{subscription.plan_tier || 'N/A'}</TableCell>
-                    )}
-                    {visibleColumns.billing && (
-                      <TableCell>
-                        {formatCurrency(subscription.cost_per_period)} / {subscription.billing_cycle}
-                      </TableCell>
-                    )}
-                    {visibleColumns.expires && (
-                      <TableCell>{formatDate(subscription.expiry_date)}</TableCell>
-                    )}
-                    {visibleColumns.actions && (
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedSubscription(subscription)}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View
-                          </Button>
-                          {subscription.portal_url && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(subscription.portal_url, '_blank')}
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <SubscriptionTableView
+            subscriptions={sortedSubscriptions}
+            visibleColumns={visibleColumns}
+            sortColumn={sortColumn}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            onViewSubscription={setSelectedSubscription}
+            formatCurrency={formatCurrency}
+            formatDate={formatDate}
+            getStatusColor={getStatusColor}
+            getStatusIcon={getStatusIcon}
+          />
         )
       ) : (
         <Card>
@@ -996,146 +452,19 @@ export default function EmployeeSubscriptionsPage() {
         </Card>
       )}
 
-      {/* Subscription Details Dialog */}
-      <Dialog open={!!selectedSubscription} onOpenChange={() => setSelectedSubscription(null)}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>{selectedSubscription?.subscription_name}</DialogTitle>
-            <DialogDescription>
-              Detailed information about this subscription
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedSubscription && (
-            <div className="space-y-6">
-              {/* Basic Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-muted-foreground">Status</label>
-                  <div className="flex items-center gap-2 mt-1">
-                    {getStatusIcon(selectedSubscription.status)}
-                    <Badge className={`${getStatusColor(selectedSubscription.status)} text-white`}>
-                      {selectedSubscription.status}
-                    </Badge>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Category</label>
-                  <div className="mt-1">{selectedSubscription.category || 'N/A'}</div>
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Plan/Tier</label>
-                  <div className="mt-1">{selectedSubscription.plan_tier || 'N/A'}</div>
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Billing Cycle</label>
-                  <div className="mt-1">{selectedSubscription.billing_cycle || 'N/A'}</div>
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Cost per Period</label>
-                  <div className="mt-1">{formatCurrency(selectedSubscription.cost_per_period)}</div>
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Auto Renewal</label>
-                  <div className="mt-1">{selectedSubscription.auto_renewal_status || 'N/A'}</div>
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Start Date</label>
-                  <div className="mt-1">{formatDate(selectedSubscription.start_date)}</div>
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Expiry Date</label>
-                  <div className="mt-1">{formatDate(selectedSubscription.expiry_date)}</div>
-                </div>
-              </div>
-
-              {/* Owner Info */}
-              <div>
-                <label className="text-sm text-muted-foreground">Owner/Responsible Person</label>
-                <div className="mt-1">
-                  {selectedSubscription.owner?.full_name || 'N/A'}
-                  {selectedSubscription.owner?.official_email && (
-                    <div className="text-sm text-muted-foreground">
-                      {selectedSubscription.owner.official_email}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Credentials */}
-              {selectedSubscription.credentials && (
-                <div>
-                  <label className="text-sm text-muted-foreground">Credentials</label>
-                  <div className="mt-2 space-y-2">
-                    {selectedSubscription.credentials.email && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm w-16">Email:</span>
-                        <span className="text-sm font-mono flex-1">{selectedSubscription.credentials.email}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => copyToClipboard(selectedSubscription.credentials.email, "Email")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                    {selectedSubscription.credentials.password && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm w-16">Password:</span>
-                        <span className="text-sm font-mono flex-1">
-                          {showCredentials[selectedSubscription.id] ? selectedSubscription.credentials.password : '••••••••'}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => togglePasswordVisibility(selectedSubscription.id)}
-                        >
-                          {showCredentials[selectedSubscription.id] ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => copyToClipboard(selectedSubscription.credentials.password, "Password")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Notes */}
-              {selectedSubscription.notes && (
-                <div>
-                  <label className="text-sm text-muted-foreground">Notes</label>
-                  <div className="mt-1 p-3 bg-muted rounded-md text-sm">
-                    {selectedSubscription.notes}
-                  </div>
-                </div>
-              )}
-
-              {/* Portal Link */}
-              {selectedSubscription.portal_url && (
-                <div>
-                  <Button
-                    onClick={() => window.open(selectedSubscription.portal_url, '_blank')}
-                    className="w-full"
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Go to Portal
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Subscription Details Modal */}
+      <SubscriptionDetailsModal
+        subscription={selectedSubscription}
+        isOpen={!!selectedSubscription}
+        onClose={() => setSelectedSubscription(null)}
+        showCredentials={showCredentials}
+        onTogglePasswordVisibility={togglePasswordVisibility}
+        onCopyToClipboard={copyToClipboard}
+        formatCurrency={formatCurrency}
+        formatDate={formatDate}
+        getStatusColor={getStatusColor}
+        getStatusIcon={getStatusIcon}
+      />
     </div>
   );
 }

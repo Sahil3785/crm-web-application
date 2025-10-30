@@ -7,8 +7,17 @@ import {
   DollarSignIcon,
   ActivityIcon,
   CalendarCheckIcon,
+  FilterIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // --- TYPE DEFINITIONS ---
 interface Lead {
@@ -82,6 +91,9 @@ export default function LeadCards() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [employees, setEmployees] = useState<{ id: string; name: string; job: string }[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>("");
+  const [teamFilter, setTeamFilter] = useState<"sales" | "operations">("sales");
 
   const currencyFormatter = useMemo(
     () =>
@@ -109,6 +121,14 @@ export default function LeadCards() {
     try {
       const leadsData = await fetchLeadsData();
       setLeads(leadsData);
+      // fetch employee list for filter
+      const { data: emp } = await supabase
+        .from("Employee Directory")
+        .select("whalesync_postgres_id, full_name, job_title")
+        .order("full_name");
+      setEmployees(
+        (emp || []).map((e: any) => ({ id: e.whalesync_postgres_id, name: e.full_name || "Unnamed", job: (e.job_title || "").toLowerCase() }))
+      );
     } catch (err: any) {
       setError(err);
     } finally {
@@ -130,8 +150,14 @@ export default function LeadCards() {
     ).length;
 
     const totalLeads = leads.length;
-    const todayFollowUps = leads.filter((r) => r.follow_up_day === todayString)
-      .length;
+    const todayFollowUps = leads.filter((r) => {
+      const followUpDate = r.follow_up_date
+        ? (typeof r.follow_up_date === 'string' ? r.follow_up_date : new Date(r.follow_up_date as any).toISOString()).split('T')[0]
+        : undefined;
+      const dateMatch = (r.follow_up_day === todayString) || (followUpDate === todayString);
+      const employeeMatch = selectedEmployee ? r.assigned_to === selectedEmployee : true;
+      return dateMatch && employeeMatch;
+    }).length;
 
     const wonRecords = leads.filter(
       (r) => r.stage?.toLowerCase() === "converted"
@@ -142,7 +168,24 @@ export default function LeadCards() {
     );
 
     return { todayLeads, totalLeads, todayFollowUps, totalSales };
-  }, [leads]);
+  }, [leads, selectedEmployee]);
+
+  // Filter employees by team (Sales vs Operations)
+  const filteredEmployees = useMemo(() => {
+    const isSales = teamFilter === "sales";
+    return employees.filter(e => {
+      const j = e.job || "";
+      if (isSales) return j.includes("sales");
+      return j.includes("operation") || j.includes("ops");
+    });
+  }, [employees, teamFilter]);
+
+  // Reset selected employee if not in current filtered list
+  useEffect(() => {
+    if (selectedEmployee && !filteredEmployees.some(e => e.id === selectedEmployee)) {
+      setSelectedEmployee("");
+    }
+  }, [teamFilter, filteredEmployees, selectedEmployee]);
 
   if (loading) {
     return <LoadingSpinner />;
@@ -182,7 +225,51 @@ export default function LeadCards() {
         <CardHeader className="space-y-2">
           <CardDescription className="flex items-center justify-between text-sm">
             <span>Today's Follow Up</span>
-            <CalendarCheckIcon className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-2">
+              {selectedEmployee && (
+                <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={employees.find(e=>e.id===selectedEmployee)?.name}>
+                  {employees.find(e=>e.id===selectedEmployee)?.name}
+                </span>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="h-6 w-6 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:bg-muted">
+                    <FilterIcon className="h-3.5 w-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>
+                    <div className="flex items-center justify-between gap-2">
+                      <span>Filter by Employee</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          className={`h-6 px-2 rounded-md text-xs border ${teamFilter==='sales' ? 'bg-primary text-primary-foreground' : 'bg-background text-foreground'}`}
+                          onClick={() => setTeamFilter('sales')}
+                          title="Show Sales team"
+                        >
+                          Sales
+                        </button>
+                        <button
+                          className={`h-6 px-2 rounded-md text-xs border ${teamFilter==='operations' ? 'bg-primary text-primary-foreground' : 'bg-background text-foreground'}`}
+                          onClick={() => setTeamFilter('operations')}
+                          title="Show Operations team"
+                        >
+                          Ops
+                        </button>
+                      </div>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setSelectedEmployee("")}>All Employees</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {filteredEmployees.map((e) => (
+                    <DropdownMenuItem key={e.id} onClick={() => setSelectedEmployee(e.id)}>
+                      {e.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </CardDescription>
           <CardTitle className="text-3xl font-bold tracking-tight">
             {kpiData.todayFollowUps}
