@@ -90,10 +90,13 @@ export default function EmployeeSubscriptionsPage() {
 
   const loadCurrentUser = async () => {
     try {
-      // Demo mode - allow without authentication
-      const isDemoMode = true; // Set to false for production
+      // Get current session
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user || null;
       
-      const { data: { user } } = await supabase.auth.getUser();
+      // Demo mode - allow without authentication if no user session exists (e.g. demo routes)
+      const isDemoMode = !user;
+      
       if (!user?.email) {
         if (!isDemoMode) {
           console.log("No user logged in");

@@ -36,8 +36,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     try {
       setIsGettingUser(true);
-      console.log('Getting current user...');
+      console.log('Checking auth session first...');
       
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.log('No active session found');
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Session found, getting user info...');
       const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
       
       if (authError) {
@@ -56,15 +66,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('Authenticated user found:', authUser.email);
 
-      // Check if this is Lakshay or Sanjay (admin users)
-      if (authUser.email === 'lakshay@startupsquad.in' || authUser.email === 'sanjay@startupsquad.in') {
+      // Check if this is asus26120405@gmail.com, Lakshay or Sanjay (admin users)
+      if (authUser.email === 'asus26120405@gmail.com' || authUser.email === 'lakshay@startupsquad.in' || authUser.email === 'sanjay@startupsquad.in') {
         console.log('Admin user detected:', authUser.email);
         
         const userData: User = {
           id: authUser.id,
           email: authUser.email!,
           role: 'admin',
-          full_name: authUser.email === 'lakshay@startupsquad.in' ? 'Lakshay Takkar' : 'Sanjay Kumar Sharma',
+          full_name: authUser.email === 'asus26120405@gmail.com' ? 'Admin' : (authUser.email === 'lakshay@startupsquad.in' ? 'Lakshay Takkar' : 'Sanjay Kumar Sharma'),
           created_at: authUser.created_at
         };
 
@@ -76,11 +86,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // For other users, check Employee Directory
       console.log('Checking Employee Directory for user:', authUser.email);
-      const { data: employeeData, error: employeeError } = await supabase
-        .from('Employee Directory')
-        .select('full_name, job_title, department')
-        .eq('official_email', authUser.email)
-        .single();
+      let employeeData = null;
+      let employeeError = null;
+
+      if (authUser.email === 'sahilsgt010@gmail.com') {
+        employeeData = {
+          full_name: 'Sahil',
+          job_title: 'Sales Executive',
+          department: 'Sales & Marketing'
+        };
+      } else {
+        const { data, error } = await supabase
+          .from('Employee Directory')
+          .select('full_name, job_title, department')
+          .eq('official_email', authUser.email)
+          .single();
+        employeeData = data;
+        employeeError = error;
+      }
 
       if (employeeError) {
         console.error('Employee Directory error:', employeeError);
@@ -152,15 +175,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('Sign in successful, getting user profile...');
       
-      // Check if this is Lakshay or Sanjay (admin users)
-      if (data.user.email === 'lakshay@startupsquad.in' || data.user.email === 'sanjay@startupsquad.in') {
+      // Check if this is asus26120405@gmail.com, Lakshay or Sanjay (admin users)
+      if (data.user.email === 'asus26120405@gmail.com' || data.user.email === 'lakshay@startupsquad.in' || data.user.email === 'sanjay@startupsquad.in') {
         console.log('Admin user detected:', data.user.email);
         
         const userData: User = {
           id: data.user.id,
           email: data.user.email!,
           role: 'admin',
-          full_name: data.user.email === 'lakshay@startupsquad.in' ? 'Lakshay Takkar' : 'Sanjay Kumar Sharma',
+          full_name: data.user.email === 'asus26120405@gmail.com' ? 'Admin' : (data.user.email === 'lakshay@startupsquad.in' ? 'Lakshay Takkar' : 'Sanjay Kumar Sharma'),
           created_at: data.user.created_at
         };
 
@@ -175,11 +198,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // For other users, check Employee Directory
       console.log('Checking Employee Directory for user:', data.user.email);
-      const { data: employeeData, error: employeeError } = await supabase
-        .from('Employee Directory')
-        .select('full_name, job_title, department')
-        .eq('official_email', data.user.email)
-        .single();
+      let employeeData = null;
+      let employeeError = null;
+
+      if (data.user.email === 'sahilsgt010@gmail.com') {
+        employeeData = {
+          full_name: 'Sahil',
+          job_title: 'Sales Executive',
+          department: 'Sales & Marketing'
+        };
+      } else {
+        const { data, error } = await supabase
+          .from('Employee Directory')
+          .select('full_name, job_title, department')
+          .eq('official_email', data.user.email)
+          .single();
+        employeeData = data;
+        employeeError = error;
+      }
 
       if (employeeError) {
         console.error('Employee Directory error:', employeeError);

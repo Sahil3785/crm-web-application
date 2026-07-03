@@ -164,11 +164,11 @@ export function LoginForm() {
             )}
           </Button>
 
-          {/* Admin Users Info */}
+          {/* Demo Users Info */}
           <div className="text-center text-sm text-muted-foreground mt-4 p-3 bg-muted/50 rounded-md">
-            <p className="font-semibold mb-1">Admin Access</p>
-            <p className="text-xs">Lakshay Takkar: lakshay@startupsquad.in</p>
-            <p className="text-xs">Sanjay Kumar Sharma: sanjay@startupsquad.in</p>
+            <p className="font-semibold mb-1">Login Access Profiles</p>
+            <p className="text-xs font-medium">Admin: asus26120405@gmail.com</p>
+            <p className="text-xs font-medium">Employee: sahilsgt010@gmail.com</p>
             <p className="text-xs mt-1">Password: Qwerty@123??</p>
           </div>
         </form>

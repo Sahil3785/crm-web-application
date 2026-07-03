@@ -47,11 +47,13 @@ export default function EmployeeDashboard() {
 
   const loadDashboardData = async () => {
     try {
-      // Demo mode - allow without authentication
-      const isDemoMode = true; // Set to false for production
+      // Get current session
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user || null;
       
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      // Demo mode - allow without authentication if no user session exists (e.g. demo routes)
+      const isDemoMode = !user;
+      
       if (!user?.email) {
         if (!isDemoMode) {
           // Clear local storage and redirect to login if not authenticated
