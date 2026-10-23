@@ -10,8 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Loader2, Eye, EyeOff, Building2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff, Building2, ShieldCheck, UserRound, Users, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { DEMO_ACCOUNTS } from '@/lib/seedData';
+import { resetLocalDb } from '@/lib/localDb';
+
+const ROLE_ICONS = { admin: ShieldCheck, employee: UserRound, hr: Users };
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -27,6 +31,7 @@ export function LoginForm() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors }
   } = useForm({
     resolver: zodResolver(loginSchema)
@@ -91,6 +96,18 @@ export function LoginForm() {
       toast.error(error.message || 'An error occurred during login');
       setIsLoading(false);
     }
+  };
+
+  const loginAs = (account: (typeof DEMO_ACCOUNTS)[number]) => {
+    setValue('email', account.email);
+    setValue('password', account.password);
+    onSubmit({ email: account.email, password: account.password });
+  };
+
+  const resetDemoData = () => {
+    if (!window.confirm('Restore the original demo data? Changes made in this browser will be lost.')) return;
+    resetLocalDb();
+    toast.success('Demo data restored');
   };
 
   return (
@@ -164,12 +181,37 @@ export function LoginForm() {
             )}
           </Button>
 
-          {/* Demo Users Info */}
-          <div className="text-center text-sm text-muted-foreground mt-4 p-3 bg-muted/50 rounded-md">
-            <p className="font-semibold mb-1">Login Access Profiles</p>
-            <p className="text-xs font-medium">Admin: asus26120405@gmail.com</p>
-            <p className="text-xs font-medium">Employee: sahilsgt010@gmail.com</p>
-            <p className="text-xs mt-1">Password: Qwerty@123??</p>
+          {/* One-click demo profiles */}
+          <div className="mt-4 space-y-3 rounded-md bg-muted/50 p-3">
+            <p className="text-center text-sm font-semibold">Sign in with a demo profile</p>
+            <div className="grid grid-cols-3 gap-2">
+              {DEMO_ACCOUNTS.map((account) => {
+                const Icon = ROLE_ICONS[account.role];
+                return (
+                  <Button
+                    key={account.email}
+                    type="button"
+                    variant="outline"
+                    className="h-auto flex-col gap-1 py-2"
+                    disabled={isLoading}
+                    onClick={() => loginAs(account)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="text-xs font-semibold">{account.label}</span>
+                  </Button>
+                );
+              })}
+            </div>
+            <p className="text-center text-xs text-muted-foreground">
+              Sample data is stored in this browser only. Password for every profile: {DEMO_ACCOUNTS[0].password}
+            </p>
+            <button
+              type="button"
+              onClick={resetDemoData}
+              className="mx-auto flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:underline"
+            >
+              <RotateCcw className="h-3 w-3" /> Reset demo data
+            </button>
           </div>
         </form>
       </CardContent>

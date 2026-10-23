@@ -190,7 +190,7 @@ export default function EmployeeAttendancePage() {
           .select('*')
           .eq('employee', employeeInfo.id)
           .eq('date', today)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('Error loading today\'s attendance from database:', error);

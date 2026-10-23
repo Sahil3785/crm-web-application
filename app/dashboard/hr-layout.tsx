@@ -6,6 +6,7 @@ import { HRSidebar } from "@/components/hr-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
+import { clearAppStorage } from "@/lib/localDb";
 
 interface HRLayoutProps {
   children: React.ReactNode;
@@ -34,7 +35,7 @@ export default function HRLayout({ children, title }: HRLayoutProps) {
           <p className="text-muted-foreground mb-4">You don't have permission to access this page.</p>
           <Button onClick={() => {
             // Clear local storage before redirecting
-            localStorage.clear();
+            clearAppStorage();
             console.log('Local storage cleared on redirect to login');
             window.location.href = '/login';
           }}>

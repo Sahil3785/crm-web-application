@@ -135,12 +135,7 @@ export default function EmployeeTasksPage() {
         
         if (!userRecord?.employee) {
           console.log("No employee record found for user");
-          console.log("Available users in database:", [
-            "sahilsgt010@gmail.com",
-            "asus26120405@gmail.com", 
-            "hr@startupsquad.in",
-            "lovekumar@startupsquad.in"
-          ]);
+
         }
         
         // Try multiple methods to find the employee record

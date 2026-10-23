@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from 'sonner';
+import { clearAppStorage } from "@/lib/localDb";
 
 interface User {
   id: string;
@@ -27,128 +28,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isGettingUser, setIsGettingUser] = useState(false);
 
+  // Look up the employee profile for a signed-in account and work out its role.
+  const loadProfile = async (authUser: { id: string; email?: string; created_at: string }): Promise<User | null> => {
+    const { data: employeeData, error } = await supabase
+      .from('Employee Directory')
+      .select('full_name, job_title, department')
+      .eq('official_email', authUser.email)
+      .single();
+
+    if (error || !employeeData) {
+      console.error('No employee record found for', authUser.email);
+      return null;
+    }
+
+    let role: 'admin' | 'hr' | 'employee' = 'employee';
+    const title = employeeData.job_title?.toLowerCase() || '';
+    if (title.includes('hr')) {
+      role = 'hr';
+    } else if (title.includes('admin') || title.includes('ceo') || title.includes('manager')) {
+      role = 'admin';
+    }
+
+    return {
+      id: authUser.id,
+      email: authUser.email!,
+      role,
+      full_name: employeeData.full_name || authUser.email!,
+      created_at: authUser.created_at
+    };
+  };
+
   // Get current user and role
   const getCurrentUser = async () => {
-    if (isGettingUser) {
-      console.log('Already getting user, skipping...');
-      return;
-    }
-    
+    if (isGettingUser) return;
+
     try {
       setIsGettingUser(true);
-      console.log('Checking auth session first...');
-      
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        console.log('No active session found');
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-      
-      console.log('Session found, getting user info...');
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError) {
-        console.error('Auth error:', authError);
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-      
-      if (!authUser) {
-        console.log('No authenticated user found');
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      console.log('Authenticated user found:', authUser.email);
-
-      // Check if this is asus26120405@gmail.com, Lakshay or Sanjay (admin users)
-      if (authUser.email === 'asus26120405@gmail.com' || authUser.email === 'lakshay@startupsquad.in' || authUser.email === 'sanjay@startupsquad.in') {
-        console.log('Admin user detected:', authUser.email);
-        
-        const userData: User = {
-          id: authUser.id,
-          email: authUser.email!,
-          role: 'admin',
-          full_name: authUser.email === 'asus26120405@gmail.com' ? 'Admin' : (authUser.email === 'lakshay@startupsquad.in' ? 'Lakshay Takkar' : 'Sanjay Kumar Sharma'),
-          created_at: authUser.created_at
-        };
-
-        console.log('Setting admin user data:', userData);
-        setUser(userData);
-        setLoading(false);
-        return;
-      }
-
-      // For other users, check Employee Directory
-      console.log('Checking Employee Directory for user:', authUser.email);
-      let employeeData = null;
-      let employeeError = null;
-
-      if (authUser.email === 'sahilsgt010@gmail.com') {
-        employeeData = {
-          full_name: 'Sahil',
-          job_title: 'Sales Executive',
-          department: 'Sales & Marketing'
-        };
-      } else {
-        const { data, error } = await supabase
-          .from('Employee Directory')
-          .select('full_name, job_title, department')
-          .eq('official_email', authUser.email)
-          .single();
-        employeeData = data;
-        employeeError = error;
-      }
-
-      if (employeeError) {
-        console.error('Employee Directory error:', employeeError);
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      if (!employeeData) {
-        console.error('No employee record found');
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      // Determine role based on job title or department
-      let role: 'admin' | 'hr' | 'employee' = 'employee';
-      
-      if (employeeData.job_title?.toLowerCase().includes('hr') || 
-          employeeData.department?.toLowerCase().includes('hr')) {
-        role = 'hr';
-      } else if (employeeData.job_title?.toLowerCase().includes('admin') || 
-                 employeeData.job_title?.toLowerCase().includes('ceo') ||
-                 employeeData.job_title?.toLowerCase().includes('manager')) {
-        role = 'admin';
-      }
-
-      console.log('User role determined:', role);
-
-      const userData: User = {
-        id: authUser.id,
-        email: authUser.email!,
-        role: role,
-        full_name: employeeData.full_name || authUser.email!,
-        created_at: authUser.created_at
-      };
-
-      console.log('Setting user data:', userData);
-      setUser(userData);
-      setLoading(false);
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session ? await loadProfile(session.user) : null);
     } catch (error) {
       console.error('Error getting current user:', error);
       setUser(null);
-      setLoading(false);
     } finally {
+      setLoading(false);
       setIsGettingUser(false);
     }
   };
@@ -156,105 +78,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Sign in function
   const signIn = async (email: string, password: string): Promise<{ user: User | null; error: string | null }> => {
     try {
-      console.log('Attempting sign in for:', email);
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
-        console.error('Sign in error:', error);
         return { user: null, error: error.message };
       }
 
       if (!data.user) {
-        console.error('No user data returned');
         return { user: null, error: 'No user data returned' };
       }
 
-      console.log('Sign in successful, getting user profile...');
-      
-      // Check if this is asus26120405@gmail.com, Lakshay or Sanjay (admin users)
-      if (data.user.email === 'asus26120405@gmail.com' || data.user.email === 'lakshay@startupsquad.in' || data.user.email === 'sanjay@startupsquad.in') {
-        console.log('Admin user detected:', data.user.email);
-        
-        const userData: User = {
-          id: data.user.id,
-          email: data.user.email!,
-          role: 'admin',
-          full_name: data.user.email === 'asus26120405@gmail.com' ? 'Admin' : (data.user.email === 'lakshay@startupsquad.in' ? 'Lakshay Takkar' : 'Sanjay Kumar Sharma'),
-          created_at: data.user.created_at
-        };
-
-        console.log('User profile loaded:', userData);
-        
-        // Update the state
-        setUser(userData);
-        setLoading(false);
-        
-        return { user: userData, error: null };
-      }
-
-      // For other users, check Employee Directory
-      console.log('Checking Employee Directory for user:', data.user.email);
-      let employeeData = null;
-      let employeeError = null;
-
-      if (data.user.email === 'sahilsgt010@gmail.com') {
-        employeeData = {
-          full_name: 'Sahil',
-          job_title: 'Sales Executive',
-          department: 'Sales & Marketing'
-        };
-      } else {
-        const { data, error } = await supabase
-          .from('Employee Directory')
-          .select('full_name, job_title, department')
-          .eq('official_email', data.user.email)
-          .single();
-        employeeData = data;
-        employeeError = error;
-      }
-
-      if (employeeError) {
-        console.error('Employee Directory error:', employeeError);
-        return { user: null, error: 'Failed to get employee profile' };
-      }
-
-      if (!employeeData) {
-        console.error('No employee record found');
+      const userData = await loadProfile(data.user);
+      if (!userData) {
+        await supabase.auth.signOut();
         return { user: null, error: 'No employee record found' };
       }
 
-      // Determine role based on job title or department
-      let role: 'admin' | 'hr' | 'employee' = 'employee';
-      
-      if (employeeData.job_title?.toLowerCase().includes('hr') || 
-          employeeData.department?.toLowerCase().includes('hr')) {
-        role = 'hr';
-      } else if (employeeData.job_title?.toLowerCase().includes('admin') || 
-                 employeeData.job_title?.toLowerCase().includes('ceo') ||
-                 employeeData.job_title?.toLowerCase().includes('manager')) {
-        role = 'admin';
-      }
-
-      console.log('User role determined:', role);
-
-      const userData: User = {
-        id: data.user.id,
-        email: data.user.email!,
-        role: role,
-        full_name: employeeData.full_name || data.user.email!,
-        created_at: data.user.created_at
-      };
-
-      console.log('User profile loaded:', userData);
-      
-      // Update the state
       setUser(userData);
       setLoading(false);
-      
       return { user: userData, error: null };
     } catch (error: any) {
       console.error('Sign in exception:', error);
@@ -286,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Error clearing local storage:', error);
       // Fallback to clear all
-      localStorage.clear();
+      clearAppStorage();
     }
   };
 

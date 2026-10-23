@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { QuickActionsDock } from "./QuickActionsDock";
 import { QuickNotes } from "./QuickNotes";
 import { SalesCounter } from "./SalesCounter";
+import { clearAppStorage } from "@/lib/localDb";
 
 interface EmployeeHeaderProps {
   title: string;
@@ -84,7 +85,7 @@ export function EmployeeHeader({ title, subtitle, onRefresh, onMenuClick, onDesk
       } catch (clearError) {
         console.error('Error clearing local storage:', clearError);
         // Fallback to clear all
-        localStorage.clear();
+        clearAppStorage();
       }
       
       toast.success("Logged out successfully");

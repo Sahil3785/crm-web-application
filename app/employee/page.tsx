@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { clearAppStorage } from "@/lib/localDb";
 
 interface DashboardStats {
   newLeads: number;
@@ -57,7 +58,7 @@ export default function EmployeeDashboard() {
       if (!user?.email) {
         if (!isDemoMode) {
           // Clear local storage and redirect to login if not authenticated
-          localStorage.clear();
+          clearAppStorage();
           console.log('Local storage cleared on authentication redirect');
           window.location.href = "/login";
           return;

@@ -25,7 +25,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  RefreshCw
+  RefreshCw,
+  UserPlus
 } from "lucide-react";
 import { AdvancedAnalytics } from "@/components/dashboard/advanced-analytics";
 import { RoleManagement } from "@/components/dashboard/role-management";

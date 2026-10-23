@@ -170,12 +170,15 @@ export function SiteHeader({
 
   const loadNotes = async () => {
     if (useDatabase) {
+      let data: any[] | null = null;
       try {
-        const { data, error } = await supabase
+        const result = await supabase
           .from('admin_notes')
           .select('*')
           .eq('page_key', notesStorageKey)
           .order('updated_at', { ascending: false });
+        const error = result.error;
+        data = result.data;
 
         if (error) {
           console.warn('Database table not found, falling back to localStorage:', error.message || error);

@@ -36,6 +36,7 @@ import {
   User,
   ChevronRight,
 } from "lucide-react";
+import { clearAppStorage } from "@/lib/localDb";
 
 // This is sample data.
 const data = {
@@ -175,7 +176,7 @@ export function HRSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     // Handle logout with local storage clearing
                     try {
                       // Clear all local storage data
-                      localStorage.clear();
+                      clearAppStorage();
                       console.log('Local storage cleared on HR logout');
                       
                       // Redirect to login
