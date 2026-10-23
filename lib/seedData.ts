@@ -10,9 +10,33 @@ export const DEMO_PASSWORD = "demo1234";
 
 // Sign-in profiles shown on the login page.
 export const DEMO_ACCOUNTS = [
-  { role: "admin", label: "Admin", name: "Aarav Mehta", email: "admin@demo.crm", password: DEMO_PASSWORD },
-  { role: "employee", label: "Employee", name: "Sahil", email: "employee@demo.crm", password: DEMO_PASSWORD },
-  { role: "hr", label: "HR", name: "Priya Sharma", email: "hr@demo.crm", password: DEMO_PASSWORD },
+  {
+    role: "admin",
+    label: "Admin",
+    name: "Aarav Mehta",
+    title: "CEO",
+    email: "admin@demo.crm",
+    password: DEMO_PASSWORD,
+    access: "Full dashboard: all leads, sales, employees, tasks, tickets, documents, subscriptions and attendance.",
+  },
+  {
+    role: "employee",
+    label: "Employee",
+    name: "Sahil",
+    title: "Sales Executive",
+    email: "employee@demo.crm",
+    password: DEMO_PASSWORD,
+    access: "Employee portal: own leads, call logs, tasks, tickets, documents and daily check-in.",
+  },
+  {
+    role: "hr",
+    label: "HR",
+    name: "Priya Sharma",
+    title: "HR Executive",
+    email: "hr@demo.crm",
+    password: DEMO_PASSWORD,
+    access: "HR attendance dashboard: everyone's attendance, with marking and editing.",
+  },
 ] as const;
 
 // Small deterministic random generator, so every fresh seed looks the same.

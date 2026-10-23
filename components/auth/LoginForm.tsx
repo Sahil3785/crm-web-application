@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from 'sonner';
 import { Loader2, Eye, EyeOff, Building2, ShieldCheck, UserRound, Users, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { DEMO_ACCOUNTS } from '@/lib/seedData';
+import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '@/lib/seedData';
 import { resetLocalDb } from '@/lib/localDb';
 
 const ROLE_ICONS = { admin: ShieldCheck, employee: UserRound, hr: Users };
@@ -181,29 +181,43 @@ export function LoginForm() {
             )}
           </Button>
 
-          {/* One-click demo profiles */}
-          <div className="mt-4 space-y-3 rounded-md bg-muted/50 p-3">
-            <p className="text-center text-sm font-semibold">Sign in with a demo profile</p>
-            <div className="grid grid-cols-3 gap-2">
+          {/* Demo profiles: which email opens which role */}
+          <div className="mt-4 space-y-3 rounded-md border bg-muted/40 p-3">
+            <div className="text-center">
+              <p className="text-sm font-semibold">Demo accounts</p>
+              <p className="text-xs text-muted-foreground">
+                Click a profile to sign in, or type its email. Password for all: <span className="font-mono font-semibold text-foreground">{DEMO_PASSWORD}</span>
+              </p>
+            </div>
+            <div className="space-y-2">
               {DEMO_ACCOUNTS.map((account) => {
                 const Icon = ROLE_ICONS[account.role];
                 return (
-                  <Button
+                  <button
                     key={account.email}
                     type="button"
-                    variant="outline"
-                    className="h-auto flex-col gap-1 py-2"
                     disabled={isLoading}
                     onClick={() => loginAs(account)}
+                    className="flex w-full items-start gap-3 rounded-md border bg-background p-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
                   >
-                    <Icon className="h-4 w-4" />
-                    <span className="text-xs font-semibold">{account.label}</span>
-                  </Button>
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-baseline justify-between gap-x-2">
+                        <span className="text-sm font-semibold">{account.label}</span>
+                        <span className="font-mono text-xs text-muted-foreground">{account.email}</span>
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {account.name}, {account.title}. {account.access}
+                      </span>
+                    </span>
+                  </button>
                 );
               })}
             </div>
             <p className="text-center text-xs text-muted-foreground">
-              Sample data is stored in this browser only. Password for every profile: {DEMO_ACCOUNTS[0].password}
+              All data is sample data saved in this browser only.
             </p>
             <button
               type="button"
