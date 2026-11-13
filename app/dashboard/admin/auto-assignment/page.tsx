@@ -14,6 +14,7 @@ import AssignmentEngineCard from "./components/AssignmentEngineCard";
 import QuickStatsCard from "./components/QuickStatsCard";
 import { EmployeeFields, LeadFields, SavedConfig } from "./components/types";
 import { getServiceIcon, getTotalAssignedEmployees, getServiceStats } from "./components/utils";
+import { COMPANY } from "@/lib/company";
 
 const AutoAssignmentPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -448,7 +449,7 @@ const AutoAssignmentPage: React.FC = () => {
               {/* Footer */}
               <div className="mt-12 text-center">
                 <p className="text-sm text-muted-foreground">
-                  Designed & Developed by <span className="font-semibold text-primary">Startup Squad Pvt. Ltd.</span>
+                  Designed & Developed by <span className="font-semibold text-primary">{COMPANY.legalName}</span>
                 </p>
               </div>
             </div>

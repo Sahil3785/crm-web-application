@@ -3,6 +3,8 @@
  * so attendance, follow-ups and call logs always look current on a fresh seed.
  */
 
+import { buildUpiLink } from "./company";
+
 export type Row = Record<string, any>;
 export type Tables = Record<string, Row[]>;
 
@@ -445,6 +447,28 @@ export function buildSeed(): Tables {
     credentials.push({ id: i + 1, subscription_id: sid, email: `accounts+${name.split(" ")[0].toLowerCase()}@demo.crm`, password: "sample-only", created_at: iso(start) });
   });
 
+  // ----------------------------------------------------------------- payments
+  const payments: Row[] = Leads.filter((l) => l.stage === "Converted")
+    .slice(0, 4)
+    .map((lead, i) => {
+      const created = daysAgo(2 + i * 3, 11 + i);
+      const reference = `PAY-DEMO${String(i + 1).padStart(3, "0")}`;
+      const amount = lead.deal_amount || lead.client_budget;
+      const paid = i % 2 === 0;
+      return {
+        id: id("70000000", i + 1),
+        reference,
+        client_name: lead.name,
+        client_phone: lead.mobile,
+        amount,
+        purpose: `${lead.services} - advance`,
+        status: paid ? "Paid" : "Pending",
+        payment_link: buildUpiLink({ amount, note: `${lead.services} - advance`, reference }),
+        created_at: iso(created),
+        paid_at: paid ? iso(daysAgo(1 + i * 3, 15)) : null,
+      };
+    });
+
   return {
     Departments: departments,
     Teams,
@@ -465,5 +489,6 @@ export function buildSeed(): Tables {
     ticket_chat,
     ticket_history,
     admin_notes: [],
+    payments,
   };
 }

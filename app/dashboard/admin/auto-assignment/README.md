@@ -16,8 +16,8 @@ This page allows administrators to configure automatic lead assignment rules bas
 Create a `.env.local` file in the `crm8` directory with your Supabase credentials:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://grjaqvdoxqendrzzgyjk.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyamFxdmRveHFlbmRyenpneWprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5Mzk3ODIsImV4cCI6MjA3MzUxNTc4Mn0.-pCRYyL6FCPZUEQEhf_0DQY5P3RsDOJAWuUCL_6okaA
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 ### 2. Database Schema

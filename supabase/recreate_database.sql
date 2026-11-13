@@ -371,20 +371,20 @@ INSERT INTO "Employee Directory" (
 -- CEO/Admin
 ('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'EMP001', 'Lakshay Takkar', 'asus26120405@gmail.com', '+91 99999 88888', 'lakshay.personal@gmail.com', '1992-04-15', '2023-01-10', 'CEO & Founder', 'Full-time', 'Office', 'Active', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Lakshay', 150000, 'Company Founder', 'Welcome back, team! Let''s achieve our Q3 goals.', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', NULL, 1),
 -- Admin
-('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'EMP002', 'Sanjay Kumar Sharma', 'sanjay@startupsquad.in', '+91 98888 77777', 'sanjay.personal@gmail.com', '1990-08-22', '2023-02-15', 'Operations Administrator', 'Full-time', 'Office', 'Active', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sanjay', 120000, 'Manages operations', 'System maintenance scheduled this Sunday.', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 1),
+('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'EMP002', 'Sanjay Kumar Sharma', 'sanjay@demo.crm', '+91 98888 77777', 'sanjay.personal@gmail.com', '1990-08-22', '2023-02-15', 'Operations Administrator', 'Full-time', 'Office', 'Active', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sanjay', 120000, 'Manages operations', 'System maintenance scheduled this Sunday.', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 1),
 -- HR Manager
-('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'EMP003', 'HR Head', 'hr@startupsquad.in', '+91 97777 66666', 'hr.peopleops@gmail.com', '1993-11-05', '2023-05-01', 'HR Lead', 'Full-time', 'Hybrid', 'Active', 'https://api.dicebear.com/7.x/avataaars/svg?seed=HRHead', 95000, 'HR Operations Head', 'New policies are updated in the Document section.', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 3),
+('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'EMP003', 'HR Head', 'hr@demo.crm', '+91 97777 66666', 'hr.peopleops@gmail.com', '1993-11-05', '2023-05-01', 'HR Lead', 'Full-time', 'Hybrid', 'Active', 'https://api.dicebear.com/7.x/avataaars/svg?seed=HRHead', 95000, 'HR Operations Head', 'New policies are updated in the Document section.', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 3),
 -- Lead Developer / Sales Hybrid
-('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'EMP004', 'Love Kumar', 'lovekumar@startupsquad.in', '+91 96666 55555', 'love.kumar@gmail.com', '1995-12-10', '2023-07-20', 'Lead Technical Consultant', 'Full-time', 'Remote', 'Active', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Love', 110000, 'Technical Sales Head', 'Tech reviews due tomorrow.', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 2),
+('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'EMP004', 'Love Kumar', 'lovekumar@demo.crm', '+91 96666 55555', 'love.kumar@gmail.com', '1995-12-10', '2023-07-20', 'Lead Technical Consultant', 'Full-time', 'Remote', 'Active', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Love', 110000, 'Technical Sales Head', 'Tech reviews due tomorrow.', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 2),
 -- Sales Manager / Lead
 ('c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a55', 'EMP005', 'Sahil', 'sahilsgt010@gmail.com', '+91 95555 44444', 'sahil.sales@gmail.com', '1994-06-18', '2023-09-01', 'Sales Manager', 'Full-time', 'Office', 'Active', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sahil', 80000, 'Senior Sales Executive', 'Highest target closer of last month!', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 4);
 
 -- Seed Users table mapping
 INSERT INTO "Users" (email, employee) VALUES
 ('asus26120405@gmail.com', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
-('sanjay@startupsquad.in', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22'),
-('hr@startupsquad.in', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33'),
-('lovekumar@startupsquad.in', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44'),
+('sanjay@demo.crm', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22'),
+('hr@demo.crm', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33'),
+('lovekumar@demo.crm', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44'),
 ('sahilsgt010@gmail.com', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a55');
 
 -- Seed Leads
@@ -436,7 +436,7 @@ INSERT INTO "tasks" (
 
 -- Seed documents (Shared library)
 INSERT INTO "documents" (id, title, description, file_name, file_type, file_size, file_url, category, status, created_by) VALUES
-('20eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Company Profile 2026', 'Startup Squad Pitch Deck and Services Document', 'Company_Profile_2026.pdf', 'pdf', 4500000, 'https://supabase.co/storage/v1/object/public/shared-docs/profile.pdf', 'Marketing', 'Active', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
+('20eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Company Profile 2026', 'Company CRM Pitch Deck and Services Document', 'Company_Profile_2026.pdf', 'pdf', 4500000, 'https://supabase.co/storage/v1/object/public/shared-docs/profile.pdf', 'Marketing', 'Active', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
 ('20eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'Employee Policy Handbook', 'Company holiday list, leave policies, and rules', 'Employee_Handbook.pdf', 'pdf', 2100000, 'https://supabase.co/storage/v1/object/public/shared-docs/handbook.pdf', 'HR', 'Active', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33');
 
 -- Seed document_assignments
@@ -467,7 +467,7 @@ INSERT INTO "subscription_users" (subscription_id, user_id) VALUES
 -- Seed credentials
 INSERT INTO "credentials" (subscription_id, email, password) VALUES
 ('30eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'asus26120405@gmail.com', 'SlackPass@2026'),
-('30eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'lovekumar@startupsquad.in', 'GitHubSecure2026!');
+('30eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'lovekumar@demo.crm', 'GitHubSecure2026!');
 
 -- Seed tickets
 INSERT INTO "tickets" (

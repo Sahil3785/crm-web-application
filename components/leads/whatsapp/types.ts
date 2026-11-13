@@ -1,3 +1,5 @@
+import { COMPANY } from "@/lib/company";
+
 export interface WhatsAppMessage {
   id: string
   leadId: string
@@ -48,7 +50,7 @@ export const DEFAULT_TEMPLATES: WhatsAppTemplate[] = [
     id: '1',
     name: 'Welcome Message',
     category: 'Onboarding',
-    content: 'Hi {{name}}, welcome to Startup Squad! We\'re excited to help you with {{service}}. How can we assist you today?',
+    content: `Hi {{name}}, welcome to ${COMPANY.name}! We're excited to help you with {{service}}. How can we assist you today?`,
     variables: ['name', 'service'],
     usage: 45,
     lastUsed: '2024-01-15'
@@ -84,7 +86,7 @@ export const DEFAULT_TEMPLATES: WhatsAppTemplate[] = [
     id: '5',
     name: 'Service Completion',
     category: 'Completion',
-    content: 'Hi {{name}}, your {{service}} is now complete! Thank you for choosing Startup Squad. We appreciate your business.',
+    content: `Hi {{name}}, your {{service}} is now complete! Thank you for choosing ${COMPANY.name}. We appreciate your business.`,
     variables: ['name', 'service'],
     usage: 22,
     lastUsed: '2024-01-11'

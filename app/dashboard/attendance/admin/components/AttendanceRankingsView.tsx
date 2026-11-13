@@ -161,9 +161,9 @@ export function AttendanceRankingsView({
                           } else if (photo.startsWith('data:')) {
                             return photo;
                           } else if (photo.startsWith('/')) {
-                            return `https://grjaqvdoxqendrzzgyjk.supabase.co${photo}`;
+                            return photo;
                           } else {
-                            return `https://grjaqvdoxqendrzzgyjk.supabase.co/storage/v1/object/public/avatars/${photo}`;
+                            return `/avatars/${photo}`;
                           }
                         })()} 
                         alt={employee.name}

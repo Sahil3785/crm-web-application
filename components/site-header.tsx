@@ -37,6 +37,7 @@ import {
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Textarea } from "@/components/ui/textarea"
 import { useState, useEffect } from "react"
+import { PaymentDialog } from "@/components/payments/PaymentDialog"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabaseClient"
@@ -104,6 +105,7 @@ export function SiteHeader({
   const pathname = usePathname();
   const dynamicTitle = title || getPageTitle(pathname);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
@@ -463,14 +465,14 @@ export function SiteHeader({
               variant="ghost" 
               size="icon" 
               className="h-9 w-9" 
-              onClick={() => window.open('https://payment-frontend-amber.vercel.app/', '_blank')}
+              onClick={() => setIsPaymentOpen(true)}
             >
               <CreditCard className="h-[1.2rem] w-[1.2rem]" />
-              <span className="sr-only">Payment System</span>
+              <span className="sr-only">Payments</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Payment System</p>
+            <p>Payments</p>
           </TooltipContent>
         </Tooltip>
 
@@ -555,6 +557,8 @@ export function SiteHeader({
       </div>
     </header>
     </TooltipProvider>
+
+    <PaymentDialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen} />
 
     {/* Quick Notes Drawer */}
     <Sheet open={isNotesOpen} onOpenChange={setIsNotesOpen}>

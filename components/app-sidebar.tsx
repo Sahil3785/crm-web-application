@@ -24,6 +24,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { COMPANY } from "@/lib/company";
 
 const data = {
   user: {
@@ -99,7 +100,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <a href="#">
                 <IconUsersGroup className="!size-5" />
-                <span className="text-base font-semibold">Startup Squad</span>
+                <span className="text-base font-semibold">{COMPANY.name}</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>

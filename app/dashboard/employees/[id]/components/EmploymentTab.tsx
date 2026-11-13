@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Edit2, Plus } from "lucide-react"
+import { COMPANY } from "@/lib/company";
 
 interface EmployeeData {
   id: number
@@ -99,9 +100,9 @@ export default function EmploymentTab({
           <span className="text-sm text-muted-foreground">Office</span>
           <div className="flex items-center space-x-2">
             <Avatar className="h-6 w-6">
-              <AvatarFallback className="text-xs">SS</AvatarFallback>
+              <AvatarFallback className="text-xs">{COMPANY.initials}</AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium">Startup Squad Pvt. Ltd.</span>
+            <span className="text-sm font-medium">{COMPANY.legalName}</span>
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <Edit2 className="h-4 w-4" />
             </Button>

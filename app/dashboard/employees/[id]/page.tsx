@@ -26,6 +26,7 @@ import CallsTab from "./components/CallsTab";
 import AddDocumentModal from "./components/AddDocumentModal";
 import { EmployeeData, CallData, AttendanceData, DocumentData, Department } from "./components/types";
 import { filterCalls } from "./components/utils";
+import { COMPANY } from "@/lib/company";
 
 export default function EmployeeDetailsPage() {
   const params = useParams();
@@ -334,7 +335,7 @@ export default function EmployeeDetailsPage() {
               </Card>
 
               <div className="mt-4 text-xs text-muted-foreground text-right">
-                Design & Developed by Startup Squad Pvt. Ltd.
+                Designed & Developed by {COMPANY.legalName}
               </div>
             </div>
           </div>

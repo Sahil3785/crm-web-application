@@ -10,6 +10,12 @@ The app runs on a database that lives in the browser (`lib/localDb.ts`), so it n
 - Changes are kept in that browser until you click **Reset demo data** on the login page.
 - Each visitor gets their own copy, so nothing they change affects anyone else.
 
+## Company details and payments
+
+The company name, registered name, initials and the UPI ID that receives client payments live in `lib/company.ts`. Change them there and the sidebar, footers, WhatsApp templates and payment requests all update.
+
+The **Payment** button in the admin and employee headers opens a built-in payment dialog. It creates a UPI payment request for a client, lets you copy the link or send it on WhatsApp, and tracks each request as Pending or Paid in the `payments` table.
+
 ## Demo logins
 
 Use the one-click buttons on the login page, or sign in by hand:

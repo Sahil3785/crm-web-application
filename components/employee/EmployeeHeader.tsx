@@ -23,6 +23,7 @@ import { QuickActionsDock } from "./QuickActionsDock";
 import { QuickNotes } from "./QuickNotes";
 import { SalesCounter } from "./SalesCounter";
 import { clearAppStorage } from "@/lib/localDb";
+import { PaymentDialog } from "@/components/payments/PaymentDialog";
 
 interface EmployeeHeaderProps {
   title: string;
@@ -37,6 +38,7 @@ export function EmployeeHeader({ title, subtitle, onRefresh, onMenuClick, onDesk
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string>("");
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [userInitials, setUserInitials] = useState<string>("U");
 
   useEffect(() => {
@@ -206,7 +208,7 @@ export function EmployeeHeader({ title, subtitle, onRefresh, onMenuClick, onDesk
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => window.open('https://payment-frontend-amber.vercel.app/', '_blank')}
+                onClick={() => setIsPaymentOpen(true)}
                 className="h-9"
               >
                 <CreditCard className="h-4 w-4 mr-2" />
@@ -214,7 +216,7 @@ export function EmployeeHeader({ title, subtitle, onRefresh, onMenuClick, onDesk
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Payment System</p>
+              <p>Create a payment request</p>
             </TooltipContent>
           </Tooltip>
 
@@ -345,6 +347,7 @@ export function EmployeeHeader({ title, subtitle, onRefresh, onMenuClick, onDesk
       </div>
 
     </header>
+    <PaymentDialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen} />
     </TooltipProvider>
   );
 }
